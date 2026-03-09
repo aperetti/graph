@@ -30,7 +30,7 @@ export const GridExplorerPanel = memo(function GridExplorerPanel({
                     <Badge color="blue" variant="light">Meters: {nodeCount.toLocaleString()}</Badge>
                     <Button
                         component="a"
-                        href="http://localhost:3000"
+                        href="/docs"
                         target="_blank"
                         variant="subtle"
                         size="compact-xs"

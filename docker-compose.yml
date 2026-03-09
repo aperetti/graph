@@ -13,7 +13,7 @@ services:
       - PARQUET_DIR=/data/cim_readings
       - CIM_MODEL_PATH=/app/IEEE8500.xml
     ports:
-      - "8000:8000"
+      - "${BACKEND_PORT:-8000}:8000"
     restart: unless-stopped
 
   frontend:
@@ -21,9 +21,17 @@ services:
       context: ./frontend
     container_name: grid-frontend
     ports:
-      - "8080:80"
+      - "${FRONTEND_PORT:-8080}:80"
     depends_on:
       - backend
+    restart: unless-stopped
+
+  documentation:
+    build:
+      context: ./docs
+    container_name: grid-docs
+    ports:
+      - "${WEBSITE_PORT:-3000}:3000"
     restart: unless-stopped
 
 volumes:

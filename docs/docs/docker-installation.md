@@ -1,6 +1,6 @@
 # Docker Installation
 
-This guide covers how to set up and run the Grid Analytical Agent using Docker.
+This guide covers how to set up and run Griddy using Docker.
 
 ## Prerequisites
 
@@ -31,6 +31,9 @@ You can customize the deployment using the following variables in the `docker-co
 | `DB_PATH` | `/data/grid_data_cim.duckdb` | Path to the persistent DuckDB file. |
 | `PARQUET_DIR` | `/data/cim_readings` | Directory for synthetic reading storage. |
 | `CIM_MODEL_PATH` | `/app/IEEE8500.xml` | Path to the CIM source model file. |
+| `BACKEND_PORT` | `8000` | Host port for the backend service. |
+| `FRONTEND_PORT` | `8080` | Host port for the frontend dashboard. |
+| `WEBSITE_PORT` | `3000` | Host port for this documentation site. |
 
 ## Accessing the Application
 

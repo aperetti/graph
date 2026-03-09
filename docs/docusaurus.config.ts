@@ -5,7 +5,7 @@ import type * as Preset from '@docusaurus/preset-classic';
 // This runs in Node.js - Don't use client-side code here (browser APIs, JSX...)
 
 const config: Config = {
-  title: 'Grid Analytical Agent',
+  title: 'Griddy',
   tagline: 'High-performance grid monitoring and analytics.',
   favicon: 'img/grid-squirrel.svg',
 
@@ -61,9 +61,9 @@ const config: Config = {
       respectPrefersColorScheme: true,
     },
     navbar: {
-      title: 'Grid Analytical Agent',
+      title: 'Griddy',
       logo: {
-        alt: 'Grid Analytical Agent Logo',
+        alt: 'Griddy Logo',
         src: 'img/grid-squirrel.svg',
       },
       items: [

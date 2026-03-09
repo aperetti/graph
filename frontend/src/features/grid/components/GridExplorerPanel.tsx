@@ -1,6 +1,6 @@
 import { memo } from 'react';
 import { Paper, Title, Text, Group, Badge, ActionIcon, Code, Button } from '@mantine/core';
-import { BarChart3, X } from 'lucide-react';
+import { BarChart3, X, BookOpen } from 'lucide-react';
 import type { Node } from '../../../shared/types';
 
 interface Props {
@@ -22,12 +22,23 @@ export const GridExplorerPanel = memo(function GridExplorerPanel({
                 background: 'rgba(26, 27, 30, 0.9)',
                 backdropFilter: 'blur(10px)'
             }}>
-                <Title order={3} mb="xs">Grid Topology Explorer</Title>
-                <Text size="sm" c="dimmed" mb="md">Integrated phase-balance analytics & AGENT-IC SQL generation.</Text>
+                <Title order={3} mb="xs">Griddy Explorer</Title>
+                <Text size="sm" c="dimmed" mb="md">High-performance grid monitoring & intelligent SCADA analytics.</Text>
 
                 <Group gap="xs">
                     <Badge color="teal" variant="light">DuckDB Backend Ready</Badge>
                     <Badge color="blue" variant="light">Meters: {nodeCount.toLocaleString()}</Badge>
+                    <Button
+                        component="a"
+                        href="http://localhost:3000"
+                        target="_blank"
+                        variant="subtle"
+                        size="compact-xs"
+                        leftSection={<BookOpen size={14} />}
+                        color="gray"
+                    >
+                        View Docs
+                    </Button>
                 </Group>
             </Paper>
 

@@ -27,6 +27,12 @@
 * **Environment**: Developed and deployed via Anti-gravity IDE.
 * **Libraries**: Minimize the number of external libraries. Use only well-established libraries that will be supported long-term.
 
-## 4. Testing & Quality Assurance
+## 4. Environment Configuration
+* **Port Mapping**: Docker Compose services must use environment variables for host port mapping with sensible defaults:
+    * `BACKEND_PORT`: Default `8000`
+    * `FRONTEND_PORT`: Default `8080`
+    * `WEBSITE_PORT`: Default `3000`
+
+## 5. Testing & Quality Assurance
 * **Test-Driven Development (TDD)**: Always follow TDD best practices.
 * **Unit/Functional Tests**: Always create and memorialize functionality in unit or functional tests.

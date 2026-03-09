@@ -1,0 +1,32 @@
+# Technical Requirements: Grid-Scale Analytical Agent
+
+## 1. Architecture & Design
+* **Vertical Slice Architecture**: Organize code by feature (vertical slices) rather than technical layers. A single file NEVER handles more than one responsibility.
+* **File Structure**: Must propose a file structure following Vertical Slice Architecture before writing any code.
+
+## 2. Infrastructure & Data Storage
+* **Database**: DuckDB must be used as the database, overriding global rule #4. Time-series and cold data should use Parquet format.
+* **Grid Model Graph**: Python with NetworkX (or similar).
+
+## 3. Interactive Visual Grid
+*   **Visualization (Frontend)**:
+    *   **Library:** Deck.gl for rendering the interactive grid topology map using geospatial coordinates.
+    *   **Features:** Interactive node clicking, context menu (right-click) for node-specific actions, geospatial zooming, panning.
+    *   **Data Fetching:** Standard `fetch` API against FastAPI REST endpoints.
+    *   **Rendering Taxonomy:** Switches must be rendered as squares. Open switches should be transparent/hollow; closed switches must be filled.
+
+*   **Backend (FastAPI & Data Ingestion)**:
+    *   **Data Ingestion (CIM):** The CIM ingestor must effectively extract robust asset taxonomy, correctly tagging `Substation`, `Breaker`, `Switch`, `Transformer`, and `Meter` types. Determine the switch 'open' status for visualizations.
+    *   **Graph Export Endpoint:** An endpoint to export the full grid (or a simplified version) as JSON (nodes and links) for the frontend visualization library.
+    *   **Time Series Endpoints:** Endpoints to fetch consumption metrics must support dynamic start/end ISO strings to fulfill UI ranges (1W, 1M, 1Y).
+    *   Existing Endpoints: Re-use `/api/analytics/phase-balance/{node_id}` to calculate the downstream aggregations upon node click.
+    *   **Synthetic AMI Generation:** Generate synthetic AMI time-series metrics traversing from 2025 through 2027.
+
+## 4. Technology Stack
+* **Language**: Python
+* **Environment**: Developed and deployed via Anti-gravity IDE.
+* **Libraries**: Minimize the number of external libraries. Use only well-established libraries that will be supported long-term.
+
+## 4. Testing & Quality Assurance
+* **Test-Driven Development (TDD)**: Always follow TDD best practices.
+* **Unit/Functional Tests**: Always create and memorialize functionality in unit or functional tests.

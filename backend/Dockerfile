@@ -32,4 +32,4 @@ ENV BOOTSTRAP_DATA=false
 # Expose the API port
 EXPOSE 8000
 
-ENTRYPOINT ["./docker-entrypoint.sh"]
+ENTRYPOINT ["sh", "./docker-entrypoint.sh"]

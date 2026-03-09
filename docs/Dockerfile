@@ -14,7 +14,7 @@ RUN npm run build
 FROM busybox:1.36
 
 WORKDIR /public
-COPY --from=builder /app/build .
+COPY --from=builder /app/build ./docs
 
 # Run httpd on port 3000
 EXPOSE 3000

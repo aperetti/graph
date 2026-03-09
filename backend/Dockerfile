@@ -18,8 +18,8 @@ COPY . .
 # Copy the CIM model from the parent directory if it's there (orchestrated by compose/build context)
 # Alternatively, we expect it to be in /app/IEEE8500.xml
 
-# Ensure entrypoint is executable
-RUN chmod +x docker-entrypoint.sh
+# Ensure entrypoint is executable and has LF line endings
+RUN sed -i 's/\r$//' docker-entrypoint.sh && chmod +x docker-entrypoint.sh
 
 # Environment defaults
 ENV HOST=0.0.0.0

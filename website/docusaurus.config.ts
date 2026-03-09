@@ -6,8 +6,8 @@ import type * as Preset from '@docusaurus/preset-classic';
 
 const config: Config = {
   title: 'Grid Analytical Agent',
-  tagline: 'Grid Monitoring & Analytics',
-  favicon: 'img/favicon.ico',
+  tagline: 'High-performance grid monitoring and analytics.',
+  favicon: 'img/grid-squirrel.svg',
 
   // Future flags, see https://docusaurus.io/docs/api/docusaurus-config#future
   future: {
@@ -64,7 +64,7 @@ const config: Config = {
       title: 'Grid Analytical Agent',
       logo: {
         alt: 'Grid Analytical Agent Logo',
-        src: 'img/logo.svg',
+        src: 'img/grid-squirrel.svg',
       },
       items: [
         {

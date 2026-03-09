@@ -12,31 +12,28 @@ type FeatureItem = {
 const FeatureList: FeatureItem[] = [
   {
     title: 'AMI Insights',
-    img: '/img/ami_insights_v2.png',
+    img: '/img/ami_insights_v3.png',
     description: (
       <>
-        Empowering utilities with high-resolution AMI data to understand behavior,
-        identify stress points, and optimize grid health.
+        Unlock actionable grid patterns with high-resolution meter data.
       </>
     ),
   },
   {
     title: 'Plan the Future Grid',
-    img: '/img/plan_future_grid_v2.png',
+    img: '/img/plan_future_grid_v3.png',
     description: (
       <>
-        Simulate network expansions and renewable integration.
-        Build a more resilient grid with predictive modeling.
+        Predict and prepare for dynamic grid evolution today.
       </>
     ),
   },
   {
     title: 'Data at Scale',
-    img: '/img/data_at_scale_v2.png',
+    img: '/img/data_at_scale_v3.png',
     description: (
       <>
-        Leverage high-performance engines to process thousands of nodes and
-        millions of readings in seconds.
+        Analyze millions of data points in real-time.
       </>
     ),
   },

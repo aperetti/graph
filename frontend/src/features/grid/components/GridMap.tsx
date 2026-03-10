@@ -277,11 +277,12 @@ export const GridMap = React.memo<GridMapProps>(({
             data: nodes.filter(n => n.type === 'Transformer'),
             getPosition: (d: Node) => d.position,
             iconAtlas: '/transformer.svg',
+            getPixelOffset: [10, 10],
             iconMapping: {
                 marker: { x: 0, y: 0, width: 100, height: 100, anchorY: 50, mask: false }
             },
             getIcon: () => 'marker',
-            getSize: () => 24,
+            getSize: () => 16,
             sizeScale: Math.pow(1.5, (viewState.zoom || 14) - 14),
             sizeMinPixels: 1,
             updateTriggers: {},

@@ -19,7 +19,7 @@ COPY . .
 # Alternatively, we expect it to be in /app/IEEE8500.xml
 
 # Ensure entrypoint is executable and has LF line endings
-RUN sed -i 's/\r$//' docker-entrypoint.sh && chmod +x docker-entrypoint.sh
+RUN sed -i 's/\r$//' docker-entrypoint.sh scripts/bootstrap.sh && chmod +x docker-entrypoint.sh scripts/bootstrap.sh
 
 # Environment defaults
 ENV HOST=0.0.0.0

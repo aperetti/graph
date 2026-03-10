@@ -131,20 +131,27 @@ def main():
                     time_series AS (
                         SELECT
                             TIMESTAMP '{start_dt}' + (i * INTERVAL '15 minutes') AS ts,
-                            HOUR(TIMESTAMP '{start_dt}' + (i * INTERVAL '15 minutes')) AS hr,
                             MONTH(TIMESTAMP '{start_dt}' + (i * INTERVAL '15 minutes')) AS mnth,
+                            DAY(TIMESTAMP '{start_dt}' + (i * INTERVAL '15 minutes')) AS dy,
+                            HOUR(TIMESTAMP '{start_dt}' + (i * INTERVAL '15 minutes')) AS hr,
                             DAYOFWEEK(TIMESTAMP '{start_dt}' + (i * INTERVAL '15 minutes')) AS dow
                         FROM range(
                             CAST(0 AS BIGINT),
                             CAST(DATEDIFF('minute', TIMESTAMP '{start_dt}', TIMESTAMP '{end_dt}') / 15 AS BIGINT)
                         ) tbl(i)
                     ),
+                    weather_series AS (
+                        SELECT t.*, COALESCE(w.temperature, 20.0) as temp
+                        FROM time_series t
+                        LEFT JOIN weather_recordings w 
+                          ON t.mnth = w.month AND t.dy = w.day AND t.hr = w.hour
+                    ),
                     combined_load AS (
                         SELECT
                             n.node_id,
                             n.phases_present,
                             n.distance_pct,
-                            t.ts AS timestamp,
+                            w.ts AS timestamp,
                             -- Customer Type Intensity based on hash:
                             -- 0-5 (60%): Residential (1x base)
                             -- 6-8 (30%): Small Commercial (5x base)
@@ -154,29 +161,32 @@ def main():
                                 WHEN abs(hash(n.node_id)) % 10 = 9 THEN 20.0
                                 ELSE 1.0
                             END
+                            -- Weather-dependent load scaling:
+                            -- 1.0 base + 5% per degree below 18C (heating) + 8% per degree above 24C (cooling)
+                            * (1.0 + 0.05 * GREATEST(0, 18 - w.temp) + 0.08 * GREATEST(0, w.temp - 24))
                             -- Hour-of-day seasonal profiles:
                             -- User wants Peak Ratios: Winter 1.0, Summer 0.8, Fall 0.4, Spring 0.3
                             -- Winter profile base peak is ~0.6. Normalizing multipliers to this peak.
                             * CASE 
-                                WHEN t.mnth IN (12, 1, 2) THEN -- Winter: 2 peaks, normalized to 1.0 ratio
-                                    (0.15 + 0.40 * EXP(-POW(t.hr - 7, 2) / 8.0) + 0.45 * EXP(-POW(t.hr - 19, 2) / 12.0)) * 1.66
-                                WHEN t.mnth IN (6, 7, 8) THEN -- Summer: Peak ratio 0.8 (0.8 / 1.0 relative to winter)
-                                    (0.25 + 0.75 * EXP(-POW(t.hr - 16, 2) / 15.0)) * 0.80
-                                WHEN t.mnth IN (3, 4, 5) THEN -- Spring: Peak ratio 0.3
-                                    (0.40 + 0.30 * EXP(-POW(t.hr - 18, 2) / 20.0)) * 0.43
+                                WHEN w.mnth IN (12, 1, 2) THEN -- Winter: 2 peaks, normalized to 1.0 ratio
+                                    (0.15 + 0.40 * EXP(-POW(w.hr - 7, 2) / 8.0) + 0.45 * EXP(-POW(w.hr - 19, 2) / 12.0)) * 1.66
+                                WHEN w.mnth IN (6, 7, 8) THEN -- Summer: Peak ratio 0.8 (0.8 / 1.0 relative to winter)
+                                    (0.25 + 0.75 * EXP(-POW(w.hr - 16, 2) / 15.0)) * 0.80
+                                WHEN w.mnth IN (3, 4, 5) THEN -- Spring: Peak ratio 0.3
+                                    (0.40 + 0.30 * EXP(-POW(w.hr - 18, 2) / 20.0)) * 0.43
                                 ELSE -- Fall: Peak ratio 0.4
-                                    (0.40 + 0.40 * EXP(-POW(t.hr - 18, 2) / 20.0)) * 0.50
+                                    (0.40 + 0.40 * EXP(-POW(w.hr - 18, 2) / 20.0)) * 0.50
                             END
                             -- Per-node variability factor
                             * (0.7 + 0.6 * random())
                             -- Weekend drop (dow 0=Sun, 6=Sat)
-                            * (CASE WHEN t.dow IN (0, 6) THEN 0.75 ELSE 1.0 END)
+                            * (CASE WHEN w.dow IN (0, 6) THEN 0.75 ELSE 1.0 END)
                             -- Correlated daily weather offset
-                            * (0.9 + 0.2 * (ABS(hash(CAST(t.ts AS DATE))) % 1000) / 1000.0)
+                            * (0.9 + 0.2 * (ABS(hash(CAST(w.ts AS DATE))) % 1000) / 1000.0)
                             -- Correlated interval jitter
-                            * (0.95 + 0.1 * (ABS(hash(t.ts)) % 1000) / 1000.0) AS lf
+                            * (0.95 + 0.1 * (ABS(hash(w.ts)) % 1000) / 1000.0) AS lf
                         FROM nodes n
-                        CROSS JOIN time_series t
+                        CROSS JOIN weather_series w
                     ),
                     -- kWh and Voltages derived from load factor
                     combined AS (

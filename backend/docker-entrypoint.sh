@@ -18,7 +18,10 @@ if [ "$BOOTSTRAP_DATA" = "true" ]; then
             export PYTHONPATH=$PYTHONPATH:/app
             python scripts/ingest_cim.py
             
-            echo "Generating synthetic readings..."
+            echo "Ingesting weather data..."
+            python scripts/ingest_weather.py
+
+            echo "Generating synthetic readings (weather-aware)..."
             python scripts/generate_cim_readings.py
             
             echo "Bootstrapping complete."

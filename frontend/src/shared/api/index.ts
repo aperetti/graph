@@ -6,12 +6,12 @@ export interface TopologyResponse {
 }
 
 export const fetchTopology = async (): Promise<TopologyResponse> => {
-    const res = await fetch('http://127.0.0.1:8000/api/graph/topology');
+    const res = await fetch('/api/graph/topology');
     return res.json();
 };
 
 export const runPhaseAnalytics = async (nodeId: string, startDate?: string, endDate?: string) => {
-    let url = `http://127.0.0.1:8000/api/analytics/phase-balance/${nodeId}?`;
+    let url = `/api/analytics/phase-balance/${nodeId}?`;
     if (startDate) url += `start_time=${startDate}&`;
     if (endDate) url += `end_time=${endDate}`;
     const res = await fetch(url);
@@ -22,7 +22,7 @@ export const runPhaseAnalytics = async (nodeId: string, startDate?: string, endD
 };
 
 export const fetchConsumption = async (nodeId: string, startDate?: string, endDate?: string) => {
-    let url = `http://127.0.0.1:8000/api/analytics/consumption/${nodeId}?`;
+    let url = `/api/analytics/consumption/${nodeId}?`;
     if (startDate) url += `start_time=${startDate}&`;
     if (endDate) url += `end_time=${endDate}`;
     const res = await fetch(url);
@@ -33,7 +33,7 @@ export const fetchConsumption = async (nodeId: string, startDate?: string, endDa
 };
 
 export const fetchVoltageDistribution = async (nodeId: string, startDate?: string, endDate?: string, degrees?: number | null) => {
-    let url = `http://127.0.0.1:8000/api/analytics/voltage/${nodeId}?`;
+    let url = `/api/analytics/voltage/${nodeId}?`;
     if (startDate) url += `start_time=${startDate}&`;
     if (endDate) url += `end_time=${endDate}&`;
     if (degrees !== undefined) url += `degrees=${degrees}`;
@@ -45,7 +45,7 @@ export const fetchVoltageDistribution = async (nodeId: string, startDate?: strin
 };
 
 export const fetchMapVoltage = async (startDate: string, endDate: string, agg: string, nodeId?: string | null) => {
-    let url = `http://127.0.0.1:8000/api/analytics/map-voltage?start_time=${startDate}&end_time=${endDate}&agg=${agg}`;
+    let url = `/api/analytics/map-voltage?start_time=${startDate}&end_time=${endDate}&agg=${agg}`;
     if (nodeId) url += `&node_id=${nodeId}`;
     const res = await fetch(url);
     if (!res.ok) {
@@ -55,7 +55,7 @@ export const fetchMapVoltage = async (startDate: string, endDate: string, agg: s
 };
 
 export const nlQuery = async (query: string) => {
-    const res = await fetch('http://127.0.0.1:8000/api/agent/query', {
+    const res = await fetch('/api/agent/query', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query })

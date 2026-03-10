@@ -38,7 +38,10 @@ class CalculateAggregateConsumptionUseCase:
                 SUM(COALESCE(current_a, 0) + COALESCE(current_b, 0) + COALESCE(current_c, 0)) as total_current,
                 MEDIAN(voltage_a) as median_volts_a,
                 MEDIAN(voltage_b) as median_volts_b,
-                MEDIAN(voltage_c) as median_volts_c
+                MEDIAN(voltage_c) as median_volts_c,
+                -- Simulated diurnal temperature cycle (Celsius)
+                -- Base 20.0 + 10.0 * sin cycle (peaks at 15:00)
+                20.0 + 10.0 * sin(PI() * (EXTRACT(hour FROM timestamp) - 9) / 12.0) as temperature
             FROM read_parquet('{self.parquet_dir}/*.parquet')
             WHERE node_id IN ({nodes_list})
               AND timestamp >= '{start_time}' 
@@ -58,7 +61,8 @@ class CalculateAggregateConsumptionUseCase:
                     "total_current": row[2],
                     "median_voltage_a": row[3],
                     "median_voltage_b": row[4],
-                    "median_voltage_c": row[5]
+                    "median_voltage_c": row[5],
+                    "temperature": row[6]
                 }
                 for row in results
             ]

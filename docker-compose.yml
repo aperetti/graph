@@ -15,6 +15,10 @@ services:
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
 
   frontend:
     build:

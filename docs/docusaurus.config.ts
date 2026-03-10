@@ -7,7 +7,7 @@ import type * as Preset from '@docusaurus/preset-classic';
 const config: Config = {
   title: 'Griddy',
   tagline: 'High-performance grid monitoring and analytics.',
-  favicon: 'img/grid-squirrel.svg',
+  favicon: 'favicon.ico',
 
   // Future flags, see https://docusaurus.io/docs/api/docusaurus-config#future
   future: {
@@ -65,7 +65,7 @@ const config: Config = {
       title: 'Griddy',
       logo: {
         alt: 'Griddy Logo',
-        src: 'img/grid-squirrel.svg',
+        src: 'img/logo.svg',
       },
       items: [
         {
@@ -73,6 +73,12 @@ const config: Config = {
           sidebarId: 'tutorialSidebar',
           position: 'left',
           label: 'Documentation',
+        },
+        {
+          to: '/',
+          label: 'Back to App',
+          position: 'left',
+          target: '_self',
         },
         {
           href: 'https://github.com/facebook/docusaurus',

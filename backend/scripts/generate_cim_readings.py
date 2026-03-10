@@ -2,9 +2,9 @@
 Generate realistic 15-minute interval readings for all real CIM nodes.
 
 Writes one parquet file per month to cim_readings/.
-~4876 nodes × 96 intervals/day × 365 days ≈ 170 M rows/year (heavy).
-We generate 6 months (Jan-Jun 2025) at 15-min resolution which is
-~85M rows — chunked monthly so DuckDB streams it without OOM.
+~4876 nodes × 96 intervals/day × 30 days ≈ 14 M rows/month.
+We generate 1 month (Jan 2025) at 15-min resolution by default.
+~14M rows — chunked monthly for performance.
 """
 import duckdb
 import os
@@ -85,7 +85,7 @@ def main():
         from datetime import datetime
         now = datetime.now()
         target_end_year = now.year
-        target_end_month = now.month + 6
+        target_end_month = now.month + 1 # Reduced from +6 to save CPU/Disk
         if target_end_month > 12:
             target_end_year += (target_end_month - 1) // 12
             target_end_month = (target_end_month - 1) % 12 + 1

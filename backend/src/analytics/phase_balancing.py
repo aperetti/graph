@@ -29,8 +29,8 @@ class PhaseBalancingUseCase:
         # If no downstream (leaf node like a Meter), query the node itself
         nodes_to_query = downstream_nodes if downstream_nodes else [start_node_id]
              
-        # Format for SQL IN clause
-        nodes_list = "'" + "','".join(nodes_to_query) + "'"
+        # Use placeholders for parameterized query
+        placeholders = ",".join(["?"] * len(nodes_to_query))
         
         query = f"""
             SELECT 
@@ -40,15 +40,17 @@ class PhaseBalancingUseCase:
                 SUM(COALESCE(current_c, 0)) as current_c,
                 SUM(COALESCE(kwh_dlv, 0)) as kwh
             FROM read_parquet('{self.parquet_dir}/*.parquet')
-            WHERE node_id IN ({nodes_list})
-              AND timestamp >= '{start_time}' 
-              AND timestamp <= '{end_time}'
+            WHERE node_id IN ({placeholders})
+              AND timestamp >= ?::TIMESTAMP
+              AND timestamp <= ?::TIMESTAMP
             GROUP BY timestamp
         """
         
+        params = list(nodes_to_query) + [start_time, end_time]
+
         try:
             with duckdb.connect(self.db_path, read_only=True) as conn:
-                results = conn.execute(query).fetchall()
+                results = conn.execute(query, params).fetchall()
 
             if not results:
                 return {

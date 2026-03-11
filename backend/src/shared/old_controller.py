@@ -1,5 +1,6 @@
 """API Controller for the Analytical Agent and Graph Queries."""
 from fastapi import APIRouter, HTTPException, Query
+from fastapi.concurrency import run_in_threadpool
 from typing import Dict, Any, List
 
 from src.shared.duckdb_repository import DuckDBRepository
@@ -114,7 +115,7 @@ async def get_map_voltage(
 ):
     """Calculates node voltage summary for the entire map or a subset."""
     _ensure_graph_built()
-    result = map_voltage_uc.execute(start_time, end_time, agg, node_id)
+    result = await run_in_threadpool(map_voltage_uc.execute, start_time, end_time, agg, node_id)
     if "error" in result:
         raise HTTPException(status_code=400, detail=result["error"])
     return result

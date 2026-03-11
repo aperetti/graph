@@ -1,7 +1,8 @@
 import '@mantine/core/styles.css';
 import '@mantine/dates/styles.css';
 import { useState, useEffect, useCallback } from 'react';
-import { MantineProvider, AppShell, Box, Stack } from '@mantine/core';
+import { MantineProvider, AppShell, Box, Stack, ActionIcon } from '@mantine/core';
+import { Menu, X } from 'lucide-react';
 
 import { GridMap } from './features/grid/components/GridMap';
 import { GridExplorerPanel } from './features/grid/components/GridExplorerPanel';
@@ -25,6 +26,7 @@ export default function App() {
     end: '2025-02-01T00:00:00'
   });
 
+  const [showPanels, setShowPanels] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [nlResult, setNlResult] = useState<string>('');
@@ -283,39 +285,54 @@ export default function App() {
             visible={!!nodeAverages}
           />
 
-          <Box
-            style={{ position: 'absolute', top: 20, right: 20, zIndex: 10, pointerEvents: 'none' }}
-            w={{ base: 'calc(100vw - 40px)', sm: 400 }}
+          {/* Floating Action Button */}
+          <ActionIcon
+            variant="filled"
+            color="dark"
+            size="xl"
+            radius="md"
+            style={{ position: 'absolute', top: 20, right: 20, zIndex: 100 }}
+            onClick={() => setShowPanels(s => !s)}
           >
-            <Stack gap="16px">
-              <div style={{ pointerEvents: 'auto' }}>
-                <GridExplorerPanel
-                  nodeCount={nodes.filter(n => n.type === 'Meter').length}
-                  selectedNode={selectedNode}
-                  onClearSelection={handleClearSelection}
-                  onViewConsumption={handleShowConsumption}
-                />
-              </div>
+            {showPanels ? <X /> : <Menu />}
+          </ActionIcon>
 
-              <div style={{ pointerEvents: 'auto' }}>
-                <AnalyticsPanel
-                  dateRange={dateRange}
-                  setDateRange={setDateRange}
-                  loading={loading}
-                  onRunVoltageMap={handleRunVoltageMap}
-                />
-              </div>
+          {showPanels && (
+            <Box
+              style={{ position: 'absolute', top: 80, right: 20, zIndex: 10, pointerEvents: 'none' }}
+              w={{ base: 'calc(100vw - 40px)', sm: 400 }}
+            >
+              <Stack gap="16px">
+                <div style={{ pointerEvents: 'auto' }}>
+                  <GridExplorerPanel
+                    nodeCount={nodes.filter(n => n.type === 'Meter').length}
+                    selectedNode={selectedNode}
+                    onClearSelection={handleClearSelection}
+                    onViewConsumption={handleShowConsumption}
+                    onViewVoltage={handleShowVoltageDistribution}
+                  />
+                </div>
 
-              <div style={{ pointerEvents: 'auto' }}>
-                <NaturalLanguagePanel
-                  query={query}
-                  setQuery={setQuery}
-                  onNlQuery={handleNlQuery}
-                  nlResult={nlResult}
-                />
-              </div>
-            </Stack>
-          </Box>
+                <div style={{ pointerEvents: 'auto' }}>
+                  <AnalyticsPanel
+                    dateRange={dateRange}
+                    setDateRange={setDateRange}
+                    loading={loading}
+                    onRunVoltageMap={handleRunVoltageMap}
+                  />
+                </div>
+
+                <div style={{ pointerEvents: 'auto' }}>
+                  <NaturalLanguagePanel
+                    query={query}
+                    setQuery={setQuery}
+                    onNlQuery={handleNlQuery}
+                    nlResult={nlResult}
+                  />
+                </div>
+              </Stack>
+            </Box>
+          )}
 
           {/* Full Width Bottom Modals */}
           <ConsumptionTimeSeriesModal

@@ -1,6 +1,6 @@
 import { memo } from 'react';
 import { Paper, Title, Text, Group, Badge, ActionIcon, Code, Button } from '@mantine/core';
-import { BarChart3, X, BookOpen } from 'lucide-react';
+import { BarChart3, X, BookOpen, Activity } from 'lucide-react';
 import type { Node } from '../../../shared/types';
 
 interface Props {
@@ -8,13 +8,15 @@ interface Props {
     selectedNode: Node | null;
     onClearSelection: () => void;
     onViewConsumption: () => void;
+    onViewVoltage: () => void;
 }
 
 export const GridExplorerPanel = memo(function GridExplorerPanel({
     nodeCount,
     selectedNode,
     onClearSelection,
-    onViewConsumption
+    onViewConsumption,
+    onViewVoltage
 }: Props) {
     return (
         <>
@@ -56,9 +58,14 @@ export const GridExplorerPanel = memo(function GridExplorerPanel({
                         Type: {selectedNode.type}{'\n'}
                         Name: {selectedNode.name}
                     </Code>
-                    <Button fullWidth size="xs" variant="light" leftSection={<BarChart3 size={14} />} onClick={onViewConsumption}>
-                        View Consumption Time-Series
-                    </Button>
+                    <Group grow gap="xs">
+                        <Button size="xs" variant="light" leftSection={<BarChart3 size={14} />} onClick={onViewConsumption}>
+                            Consumption Time-Series
+                        </Button>
+                        <Button size="xs" variant="light" color="cyan" leftSection={<Activity size={14} />} onClick={onViewVoltage}>
+                            Voltage Distribution
+                        </Button>
+                    </Group>
                 </Paper>
             )}
         </>

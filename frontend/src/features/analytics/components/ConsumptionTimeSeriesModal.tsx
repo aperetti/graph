@@ -257,7 +257,7 @@ export function ConsumptionTimeSeriesModal({
         >
             <Box px="md" py="xs" style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
                 <Group justify="space-between" align="center" wrap="nowrap">
-                    <Title order={5} truncate>Grid Analytics: {nodeName}</Title>
+                    <Title order={5} style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Grid Analytics: {nodeName}</Title>
                     <Group wrap="nowrap" gap="xs">
                         <Button
                             variant="subtle"
@@ -358,7 +358,7 @@ export function ConsumptionTimeSeriesModal({
                                             textStyle: { color: '#A6A7AB', fontSize: 10 },
                                             top: 0
                                         },
-                                        grid: { left: 40, right: 40, bottom: 25, top: 30, containLabel: true },
+                                        grid: { left: 40, right: 40, bottom: 25, top: 45, containLabel: true },
                                         xAxis: {
                                             type: 'time',
                                             axisLabel: {

@@ -50,7 +50,7 @@ export const VoltageDistributionModal = memo(function VoltageDistributionModal({
         >
             <Box px="md" py="xs" style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
                 <Group justify="space-between" align="center" wrap="nowrap">
-                    <Title order={5} truncate>Voltage Analysis: {nodeName}</Title>
+                    <Title order={5} style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Voltage Analysis: {nodeName}</Title>
                     <Group wrap="nowrap" gap="xs">
                         <Button
                             variant="subtle"

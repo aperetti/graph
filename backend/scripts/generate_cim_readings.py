@@ -192,21 +192,16 @@ def main():
                             phases_present,
                             distance_pct,
                             timestamp,
-                            -- Multiplier for sizing
-                            CASE 
-                                WHEN cust_type = 'Commercial' THEN 5.0
-                                WHEN cust_type = 'Industrial' THEN 20.0
-                                ELSE 1.0
-                            END
-                            -- Base Profile
-                            * base_lf
-                            -- Weather-dependent load scaling
-                            * (1.0 + (0.15 * heat_sensitivity * GREATEST(0, 18 - temp)) + (0.25 * GREATEST(0, temp - 24)))
-                            -- Per-node variability factor
-                            * (0.7 + 0.6 * random())
-                            -- Weekend drop (dow 0=Sun, 6=Sat)
-                            -- Note: dow joined in weather_series w as w.dow
-                            * (CASE WHEN 1.0 = 1.0 THEN 1.0 ELSE 1.0 END) -- Placeholder for w.dow if needed
+                            (
+                                CASE 
+                                    WHEN cust_type = 'Commercial' THEN 5.0
+                                    WHEN cust_type = 'Industrial' THEN 20.0
+                                    ELSE 1.0
+                                END
+                                * base_lf
+                                * (1.0 + (0.15 * heat_sensitivity * GREATEST(0, 18 - temp)) + (0.25 * GREATEST(0, temp - 24)))
+                                * (0.7 + 0.6 * random())
+                            ) AS lf
                         FROM combined_load
                     ),
                     -- kWh and Voltages derived from load factor

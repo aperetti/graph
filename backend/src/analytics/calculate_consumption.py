@@ -33,21 +33,23 @@ class CalculateAggregateConsumptionUseCase:
         
         query = f"""
             SELECT 
-                timestamp,
-                SUM(COALESCE(kwh_dlv, 0)) as total_kwh_dlv,
-                SUM(COALESCE(current_a, 0) + COALESCE(current_b, 0) + COALESCE(current_c, 0)) as total_current,
-                MEDIAN(voltage_a) as median_volts_a,
-                MEDIAN(voltage_b) as median_volts_b,
-                MEDIAN(voltage_c) as median_volts_c,
-                -- Simulated diurnal temperature cycle (Celsius)
-                -- Base 20.0 + 10.0 * sin cycle (peaks at 15:00)
-                20.0 + 10.0 * sin(PI() * (EXTRACT(hour FROM timestamp) - 9) / 12.0) as temperature
-            FROM read_parquet('{self.parquet_dir}/*.parquet')
-            WHERE node_id IN ({nodes_list})
-              AND timestamp >= '{start_time}' 
-              AND timestamp <= '{end_time}'
-            GROUP BY timestamp
-            ORDER BY timestamp ASC
+                r.timestamp,
+                SUM(COALESCE(r.kwh_dlv, 0)) as total_kwh_dlv,
+                SUM(COALESCE(r.current_a, 0) + COALESCE(r.current_b, 0) + COALESCE(r.current_c, 0)) as total_current,
+                MEDIAN(r.voltage_a) as median_volts_a,
+                MEDIAN(r.voltage_b) as median_volts_b,
+                MEDIAN(r.voltage_c) as median_volts_c,
+                MAX(w.temperature) as temperature
+            FROM read_parquet('{self.parquet_dir}/*.parquet') r
+            LEFT JOIN weather_recordings w 
+                ON w.month = EXTRACT(month FROM r.timestamp)
+                AND w.day = EXTRACT(day FROM r.timestamp)
+                AND w.hour = EXTRACT(hour FROM r.timestamp)
+            WHERE r.node_id IN ({nodes_list})
+              AND r.timestamp >= '{start_time}' 
+              AND r.timestamp <= '{end_time}'
+            GROUP BY r.timestamp
+            ORDER BY r.timestamp ASC
         """
         
         try:

@@ -151,19 +151,8 @@ export default function App() {
       } else {
         setHighlightedEdges(new Set());
       }
-      if (res.time_series) {
-        let ts = res.time_series;
-        if (ts.length > 100) {
-          const factor = Math.ceil(ts.length / 100);
-          ts = ts.filter((_: any, i: number) => i % factor === 0);
-        }
-        setConsumptionData(ts.map((d: any) => ({
-          date: new Date(d.timestamp).toLocaleString(),
-          delivered: d.kwh_delivered,
-          voltageA: d.median_voltage_a,
-          voltageB: d.median_voltage_b,
-          voltageC: d.median_voltage_c
-        })));
+      if (res.time_series && res.time_series.length > 0) {
+        setConsumptionData(res.time_series);
       }
     } catch (err) {
       console.error('[App] Failed to fetch consumption:', err);

@@ -21,6 +21,10 @@ This will:
 3. Initialize the **grid_data** persistent volume.
 4. Auto-ingest the `IEEE8500.xml` model and generate synthetic data (if `BOOTSTRAP_DATA` is true).
 
+### Manual Data Generation
+
+If you need to refresh the data or re-run the ingestion pipeline manually, see the [Data Generation](./data-generation) guide.
+
 ## Environment Variables
 
 You can customize the deployment using the following variables in the `docker-compose.yml` or an `.env` file:

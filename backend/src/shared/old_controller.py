@@ -1,5 +1,6 @@
 """API Controller for the Analytical Agent and Graph Queries."""
 from fastapi import APIRouter, HTTPException, Query
+from fastapi.concurrency import run_in_threadpool
 from typing import Dict, Any, List
 
 from src.shared.duckdb_repository import DuckDBRepository
@@ -74,7 +75,7 @@ async def get_voltage_distribution(
 ):
     """Calculates voltage distribution downstream of a node."""
     _ensure_graph_built()
-    result = voltage_uc.execute(node_id, start_time, end_time, degrees=degrees)
+    result = await run_in_threadpool(voltage_uc.execute, node_id, start_time, end_time, degrees=degrees)
     if "error" in result:
         raise HTTPException(status_code=400, detail=result["error"])
     return result

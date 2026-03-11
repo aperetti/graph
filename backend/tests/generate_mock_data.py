@@ -23,14 +23,14 @@ def generate_mock_data():
 
         # Insert Mock Nodes
         print("Inserting nodes...")
-        conn.execute("INSERT INTO grid_nodes VALUES ('SUB-1', 'SubstationBreaker', 'Main Substation', 'ABC', ?, ?) ON CONFLICT DO NOTHING", (base_lat, base_lon))
-        conn.execute("INSERT INTO grid_nodes VALUES ('TX-A', 'Transformer', 'Transformer A', 'A', ?, ?) ON CONFLICT DO NOTHING", (base_lat + random_offset(), base_lon + random_offset()))
-        conn.execute("INSERT INTO grid_nodes VALUES ('TX-B', 'Transformer', 'Transformer B', 'B', ?, ?) ON CONFLICT DO NOTHING", (base_lat + random_offset(), base_lon + random_offset()))
+        conn.execute("INSERT INTO grid_nodes VALUES ('SUB-1', 'SubstationBreaker', 'Main Substation', 'ABC', ?, ?, True) ON CONFLICT DO NOTHING", (base_lat, base_lon))
+        conn.execute("INSERT INTO grid_nodes VALUES ('TX-A', 'Transformer', 'Transformer A', 'A', ?, ?, True) ON CONFLICT DO NOTHING", (base_lat + random_offset(), base_lon + random_offset()))
+        conn.execute("INSERT INTO grid_nodes VALUES ('TX-B', 'Transformer', 'Transformer B', 'B', ?, ?, True) ON CONFLICT DO NOTHING", (base_lat + random_offset(), base_lon + random_offset()))
         
-        conn.execute("INSERT INTO grid_nodes VALUES ('M-1', 'Meter', 'Meter 1', 'A', ?, ?) ON CONFLICT DO NOTHING", (base_lat + random_offset(), base_lon + random_offset()))
-        conn.execute("INSERT INTO grid_nodes VALUES ('M-2', 'Meter', 'Meter 2', 'A', ?, ?) ON CONFLICT DO NOTHING", (base_lat + random_offset(), base_lon + random_offset()))
-        conn.execute("INSERT INTO grid_nodes VALUES ('M-3', 'Meter', 'Meter 3', 'B', ?, ?) ON CONFLICT DO NOTHING", (base_lat + random_offset(), base_lon + random_offset()))
-        conn.execute("INSERT INTO grid_nodes VALUES ('M-4', 'Meter', 'Meter 4', 'B', ?, ?) ON CONFLICT DO NOTHING", (base_lat + random_offset(), base_lon + random_offset()))
+        conn.execute("INSERT INTO grid_nodes VALUES ('M-1', 'Meter', 'Meter 1', 'A', ?, ?, True) ON CONFLICT DO NOTHING", (base_lat + random_offset(), base_lon + random_offset()))
+        conn.execute("INSERT INTO grid_nodes VALUES ('M-2', 'Meter', 'Meter 2', 'A', ?, ?, True) ON CONFLICT DO NOTHING", (base_lat + random_offset(), base_lon + random_offset()))
+        conn.execute("INSERT INTO grid_nodes VALUES ('M-3', 'Meter', 'Meter 3', 'B', ?, ?, True) ON CONFLICT DO NOTHING", (base_lat + random_offset(), base_lon + random_offset()))
+        conn.execute("INSERT INTO grid_nodes VALUES ('M-4', 'Meter', 'Meter 4', 'B', ?, ?, True) ON CONFLICT DO NOTHING", (base_lat + random_offset(), base_lon + random_offset()))
         
         print("Inserting graph edges...")
         edges = [

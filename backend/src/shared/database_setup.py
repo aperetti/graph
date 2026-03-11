@@ -17,7 +17,7 @@ def init_db():
             node_type VARCHAR,
             name VARCHAR,
             phases_present VARCHAR,
-            latitude DOUBLE,
+            latitude DOUBLE, is_open BOOLEAN,
             longitude DOUBLE
         );
     """)

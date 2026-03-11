@@ -5,10 +5,18 @@ from src.grid.networkx_engine import NetworkXEngine
 from src.discovery.discover_downstream import DiscoverDownstreamUseCase
 from src.analytics.calculate_voltage import CalculateVoltageDistributionUseCase
 from src.analytics.phase_balancing import PhaseBalancingUseCase
+import os
+
+# Check if scale db exists to prevent IO Error in test
 DB_PATH = "grid_data_scale.duckdb"
 PARQUET_DIR = "readings_scale"
 
 def test_scale_performance():
+    if not os.path.exists(DB_PATH):
+        import pytest
+        pytest.skip(f"Scale database {DB_PATH} not found. Run generate_scale_data.py to generate it.")
+        return
+
     print("Initializing Graph Engine...")
     start_time = time.time()
     repo = DuckDBRepository(DB_PATH)

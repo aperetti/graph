@@ -20,19 +20,21 @@ def graph_engine(repo):
     engine.build_graph(edges=edges)
     return engine
 
+from src.shared.database_setup import DB_PATH, PARQUET_DIR
+
 def test_downstream_discovery(graph_engine):
     """Test discovering meters downstream of a transformer."""
     uc = DiscoverDownstreamUseCase(graph_engine)
     
     # From our mock data, TX-A should feed M-1 and M-2
-    downstream = uc.execute("TX-A")
-    assert "M-1" in downstream
-    assert "M-2" in downstream
-    assert len(downstream) == 2
+    downstream_nodes, downstream_edges = uc.execute("TX-A")
+    assert "M-1" in downstream_nodes
+    assert "M-2" in downstream_nodes
+    assert len(downstream_nodes) == 2
 
 def test_voltage_distribution(graph_engine):
     """Test voltage distribution across a transformer."""
-    uc = CalculateVoltageDistributionUseCase(graph_engine, DB_PATH)
+    uc = CalculateVoltageDistributionUseCase(graph_engine, DB_PATH, PARQUET_DIR)
     
     # Query TX-B (feeds M-3 and M-4)
     # Using a wide time range to catch our mock data
@@ -40,19 +42,17 @@ def test_voltage_distribution(graph_engine):
     
     assert "error" not in result
     assert result["node_count"] == 2
-    assert result["mean_voltage"] > 0
-    assert result["median_voltage"] > 0
+    assert "distribution" in result
+    assert len(result["distribution"]) > 0
 
 def test_phase_balancing(graph_engine):
     """Test phase balancing across the main substation."""
-    uc = PhaseBalancingUseCase(graph_engine, DB_PATH)
+    uc = PhaseBalancingUseCase(graph_engine, DB_PATH, PARQUET_DIR)
     
     # Query SUB-1 (feeds everything)
     result = uc.execute("SUB-1", "2020-01-01T00:00:00", "2030-01-01T00:00:00")
     
     assert "error" not in result
     assert result["node_count"] == 6 # TX-A, TX-B, M-1, M-2, M-3, M-4
-    assert result["total_current_a"] > 0
-    assert result["total_current_b"] > 0
-    assert result["total_current_c"] > 0
+    assert result["total_kwh_delivered"] > 0
     assert result["imbalance_delta"] >= 0

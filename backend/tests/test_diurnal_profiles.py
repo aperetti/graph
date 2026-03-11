@@ -1,10 +1,10 @@
 import os
 import duckdb
 
+from src.shared.database_setup import DB_PATH
+
 def get_db_connection() -> duckdb.DuckDBPyConnection:
-    backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    db_path = os.path.join(backend_dir, "grid_data_cim.duckdb")
-    return duckdb.connect(db_path, read_only=True)
+    return duckdb.connect(DB_PATH, read_only=True)
 
 def test_diurnal_variation():
     """

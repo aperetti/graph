@@ -140,13 +140,20 @@ async def get_topology():
     import networkx as nx
     undirected_graph = graph_engine.graph.to_undirected()
     
+    components = list(nx.connected_components(undirected_graph))
+    node_to_comp_idx = {}
+    for idx, comp in enumerate(components):
+        for node in comp:
+            node_to_comp_idx[node] = idx
+
+    comp_to_circuit = {}
     for i, sub_id in enumerate(substations):
-        circuit_id = f"circuit_{i+1}"
-        if sub_id in undirected_graph:
-            downstream = list(nx.node_connected_component(undirected_graph, sub_id))
-            for ds_node in downstream:
-                node_to_circuit[ds_node] = circuit_id
-            node_to_circuit[sub_id] = circuit_id
+        if sub_id in node_to_comp_idx:
+            comp_to_circuit[node_to_comp_idx[sub_id]] = f"circuit_{i+1}"
+
+    for comp_idx, circuit_id in comp_to_circuit.items():
+        for node in components[comp_idx]:
+            node_to_circuit[node] = circuit_id
     
     # We need to attach source and target coordinates to the edges for Deck.gl LineLayer
     node_coords = {n['node_id']: [n['longitude'], n['latitude']] for n in nodes if n['longitude'] and n['latitude']}

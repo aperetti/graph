@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Paper, Group, Title, ActionIcon, Box, Text, Stack, Select, NumberInput } from '@mantine/core';
+import { Paper, Group, Title, ActionIcon, Box, Text, Stack, Select, NumberInput, SimpleGrid } from '@mantine/core';
 import { X } from 'lucide-react';
 import ReactECharts from 'echarts-for-react';
 
@@ -254,11 +254,11 @@ export function ConsumptionTimeSeriesModal({
                 flexDirection: 'column'
             }}
         >
-            <Group justify="space-between" px="md" py="xs" style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-                <Group gap="xl">
+            <Group justify="space-between" align="flex-start" wrap="wrap" px="md" py="xs" style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                <Group gap="xl" wrap="wrap">
                     <Title order={5}>Grid Analytics: {nodeName}</Title>
 
-                    <Group gap="xs">
+                    <Group gap="xs" wrap="wrap">
                         <Text size="xs" c="dimmed">Month Range:</Text>
                         <Select
                             id="select-month-start"
@@ -281,7 +281,7 @@ export function ConsumptionTimeSeriesModal({
                         />
                     </Group>
 
-                    <Group gap="xs">
+                    <Group gap="xs" wrap="wrap">
                         <Text size="xs" c="dimmed">Time Range (Slicer):</Text>
                         <Select
                             id="select-hour-start"
@@ -406,7 +406,7 @@ export function ConsumptionTimeSeriesModal({
                                 />
                             </Box>
 
-                            <Group grow align="stretch" gap="lg" mb="xl">
+                            <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg" mb="xl">
                                 <Box style={{ height: 380 }}>
                                     <Text size="xs" fw={700} c="dimmed" mb={4} ta="center">Typical Daily Load Profile (Hourly Avg)</Text>
                                     <ReactECharts
@@ -537,7 +537,7 @@ export function ConsumptionTimeSeriesModal({
                                         }}
                                     />
                                 </Box>
-                            </Group>
+                            </SimpleGrid>
                         </Stack>
                     </Box>
                 )}

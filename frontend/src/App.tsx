@@ -1,7 +1,7 @@
 import '@mantine/core/styles.css';
 import '@mantine/dates/styles.css';
 import { useState, useEffect, useCallback } from 'react';
-import { MantineProvider, AppShell, Box } from '@mantine/core';
+import { MantineProvider, AppShell, Box, Stack } from '@mantine/core';
 
 import { GridMap } from './features/grid/components/GridMap';
 import { GridExplorerPanel } from './features/grid/components/GridExplorerPanel';
@@ -283,43 +283,38 @@ export default function App() {
             visible={!!nodeAverages}
           />
 
-          <Box style={{
-            position: 'absolute',
-            top: 20,
-            right: 20,
-            width: 400,
-            zIndex: 10,
-            pointerEvents: 'none',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '16px'
-          }}>
-            <div style={{ pointerEvents: 'auto' }}>
-              <GridExplorerPanel
-                nodeCount={nodes.filter(n => n.type === 'Meter').length}
-                selectedNode={selectedNode}
-                onClearSelection={handleClearSelection}
-                onViewConsumption={handleShowConsumption}
-              />
-            </div>
+          <Box
+            style={{ position: 'absolute', top: 20, right: 20, zIndex: 10, pointerEvents: 'none' }}
+            w={{ base: 'calc(100vw - 40px)', sm: 400 }}
+          >
+            <Stack gap="16px">
+              <div style={{ pointerEvents: 'auto' }}>
+                <GridExplorerPanel
+                  nodeCount={nodes.filter(n => n.type === 'Meter').length}
+                  selectedNode={selectedNode}
+                  onClearSelection={handleClearSelection}
+                  onViewConsumption={handleShowConsumption}
+                />
+              </div>
 
-            <div style={{ pointerEvents: 'auto' }}>
-              <AnalyticsPanel
-                dateRange={dateRange}
-                setDateRange={setDateRange}
-                loading={loading}
-                onRunVoltageMap={handleRunVoltageMap}
-              />
-            </div>
+              <div style={{ pointerEvents: 'auto' }}>
+                <AnalyticsPanel
+                  dateRange={dateRange}
+                  setDateRange={setDateRange}
+                  loading={loading}
+                  onRunVoltageMap={handleRunVoltageMap}
+                />
+              </div>
 
-            <div style={{ pointerEvents: 'auto' }}>
-              <NaturalLanguagePanel
-                query={query}
-                setQuery={setQuery}
-                onNlQuery={handleNlQuery}
-                nlResult={nlResult}
-              />
-            </div>
+              <div style={{ pointerEvents: 'auto' }}>
+                <NaturalLanguagePanel
+                  query={query}
+                  setQuery={setQuery}
+                  onNlQuery={handleNlQuery}
+                  nlResult={nlResult}
+                />
+              </div>
+            </Stack>
           </Box>
 
           {/* Full Width Bottom Modals */}

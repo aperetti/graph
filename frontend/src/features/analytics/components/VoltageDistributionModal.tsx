@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { Paper, Group, Title, ActionIcon, Box, Text, Select } from '@mantine/core';
+import { Paper, Group, Title, ActionIcon, Box, Text, Select, Grid } from '@mantine/core';
 import { X } from 'lucide-react';
 import ReactECharts from 'echarts-for-react';
 
@@ -36,8 +36,9 @@ export const VoltageDistributionModal = memo(function VoltageDistributionModal({
                 bottom: 0,
                 left: 0,
                 right: 0,
-                height: '22vh',
+                maxHeight: '90vh',
                 minHeight: 220,
+                overflowY: 'auto',
                 zIndex: 20,
                 background: 'rgba(26, 27, 30, 0.95)',
                 backdropFilter: 'blur(10px)',
@@ -45,10 +46,10 @@ export const VoltageDistributionModal = memo(function VoltageDistributionModal({
                 flexDirection: 'column'
             }}
         >
-            <Group justify="space-between" px="md" py="xs" style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-                <Group gap="xl">
+            <Group justify="space-between" align="flex-start" wrap="wrap" px="md" py="xs" style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                <Group gap="xl" wrap="wrap">
                     <Title order={5}>Voltage Analysis: {nodeName}</Title>
-                    <Group gap="xs">
+                    <Group gap="xs" wrap="wrap">
                         <Text size="xs" c="dimmed">Search Depth:</Text>
                         <Select
                             size="xs"
@@ -86,9 +87,9 @@ export const VoltageDistributionModal = memo(function VoltageDistributionModal({
                         <Text c="dimmed">No distribution data found for this node in the selected date range.</Text>
                     </Box>
                 ) : (
-                    <Group style={{ width: '100%', height: '100%' }} wrap="nowrap" gap="md" align="stretch">
+                    <Grid style={{ width: '100%', height: '100%' }} gutter="md" align="stretch">
                         {/* 1. KDE Distribution */}
-                        <Box style={{ width: '20%', height: '100%' }}>
+                        <Grid.Col span={{ base: 12, md: 4, lg: 3 }} style={{ height: '100%', minHeight: 200 }}>
                             <Text size="xs" c="dimmed" mb={4} ta="center">Distribution (KDE)</Text>
                             <Box h="calc(100% - 24px)" w="100%">
                                 <ReactECharts
@@ -140,10 +141,10 @@ export const VoltageDistributionModal = memo(function VoltageDistributionModal({
                                     }}
                                 />
                             </Box>
-                        </Box>
+                        </Grid.Col>
 
                         {/* 2. Daily Timeseries (Median + 10/90 Bands) */}
-                        <Box style={{ width: '40%', height: '100%' }}>
+                        <Grid.Col span={{ base: 12, md: 8, lg: 5 }} style={{ height: '100%', minHeight: 200 }}>
                             <Text size="xs" c="dimmed" mb={4} ta="center">Daily Voltage stability (Median & 10/90 Bands)</Text>
                             <Box h="calc(100% - 24px)" w="100%">
                                 <ReactECharts
@@ -192,10 +193,10 @@ export const VoltageDistributionModal = memo(function VoltageDistributionModal({
                                     }}
                                 />
                             </Box>
-                        </Box>
+                        </Grid.Col>
 
                         {/* 3. Heatmap */}
-                        <Box style={{ width: '40%', height: '100%' }}>
+                        <Grid.Col span={{ base: 12, md: 12, lg: 4 }} style={{ height: '100%', minHeight: 200 }}>
                             <Text size="xs" c="dimmed" mb={4} ta="center">Voltage vs Loading (Heatmap)</Text>
                             <Box h="calc(100% - 24px)" w="100%">
                                 <ReactECharts
@@ -254,8 +255,8 @@ export const VoltageDistributionModal = memo(function VoltageDistributionModal({
                                     }}
                                 />
                             </Box>
-                        </Box>
-                    </Group>
+                        </Grid.Col>
+                    </Grid>
                 )}
             </Box>
         </Paper>

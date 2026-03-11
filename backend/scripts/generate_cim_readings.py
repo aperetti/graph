@@ -153,40 +153,61 @@ def main():
                             n.distance_pct,
                             w.ts AS timestamp,
                             -- Customer Type Intensity based on hash:
-                            -- 0-5 (60%): Residential (1x base)
-                            -- 6-8 (30%): Small Commercial (5x base)
-                            -- 9 (10%): Large Commercial (20x base)
+                            -- 0-5 (60%): Residential
+                            -- 6-8 (30%): Small Commercial
+                            -- 9 (10%): Large Commercial (Industrial)
                             CASE 
-                                WHEN abs(hash(n.node_id)) % 10 IN (6, 7, 8) THEN 5.0
-                                WHEN abs(hash(n.node_id)) % 10 = 9 THEN 20.0
+                                WHEN abs(hash(n.node_id)) % 10 IN (6, 7, 8) THEN 'Commercial'
+                                WHEN abs(hash(n.node_id)) % 10 = 9 THEN 'Industrial'
+                                ELSE 'Residential'
+                            END as cust_type,
+                            -- Diurnal Base Load Factor:
+                            CASE
+                                WHEN abs(hash(n.node_id)) % 10 IN (6, 7, 8, 9) -- Commercial/Industrial
+                                    THEN CASE 
+                                        WHEN w.hr BETWEEN 8 AND 18 THEN 1.0 
+                                        WHEN w.hr BETWEEN 6 AND 22 THEN 0.6
+                                        ELSE 0.2 
+                                    END
+                                ELSE -- Residential
+                                    CASE 
+                                        WHEN w.hr BETWEEN 6 AND 9 THEN 0.8
+                                        WHEN w.hr BETWEEN 17 AND 22 THEN 1.0
+                                        WHEN w.hr BETWEEN 9 AND 17 THEN 0.4
+                                        ELSE 0.3
+                                    END
+                            END as base_lf,
+                            -- Nocturnal Heating Sensitivity Attenuation:
+                            CASE 
+                                WHEN w.hr BETWEEN 0 AND 6 THEN 0.4 -- 40% sensitivity at night
+                                ELSE 1.0 
+                            END as heat_sensitivity,
+                            w.temp
+                        FROM nodes n
+                        CROSS JOIN weather_series w
+                    ),
+                    final_load AS (
+                        SELECT
+                            node_id,
+                            phases_present,
+                            distance_pct,
+                            timestamp,
+                            -- Multiplier for sizing
+                            CASE 
+                                WHEN cust_type = 'Commercial' THEN 5.0
+                                WHEN cust_type = 'Industrial' THEN 20.0
                                 ELSE 1.0
                             END
-                            -- Weather-dependent load scaling:
-                            -- 1.0 base + 5% per degree below 18C (heating) + 8% per degree above 24C (cooling)
-                            * (1.0 + 0.05 * GREATEST(0, 18 - w.temp) + 0.08 * GREATEST(0, w.temp - 24))
-                            -- Hour-of-day seasonal profiles:
-                            -- User wants Peak Ratios: Winter 1.0, Summer 0.8, Fall 0.4, Spring 0.3
-                            -- Winter profile base peak is ~0.6. Normalizing multipliers to this peak.
-                            * CASE 
-                                WHEN w.mnth IN (12, 1, 2) THEN -- Winter: 2 peaks, normalized to 1.0 ratio
-                                    (0.15 + 0.40 * EXP(-POW(w.hr - 7, 2) / 8.0) + 0.45 * EXP(-POW(w.hr - 19, 2) / 12.0)) * 1.66
-                                WHEN w.mnth IN (6, 7, 8) THEN -- Summer: Peak ratio 0.8 (0.8 / 1.0 relative to winter)
-                                    (0.25 + 0.75 * EXP(-POW(w.hr - 16, 2) / 15.0)) * 0.80
-                                WHEN w.mnth IN (3, 4, 5) THEN -- Spring: Peak ratio 0.3
-                                    (0.40 + 0.30 * EXP(-POW(w.hr - 18, 2) / 20.0)) * 0.43
-                                ELSE -- Fall: Peak ratio 0.4
-                                    (0.40 + 0.40 * EXP(-POW(w.hr - 18, 2) / 20.0)) * 0.50
-                            END
+                            -- Base Profile
+                            * base_lf
+                            -- Weather-dependent load scaling
+                            * (1.0 + (0.15 * heat_sensitivity * GREATEST(0, 18 - temp)) + (0.25 * GREATEST(0, temp - 24)))
                             -- Per-node variability factor
                             * (0.7 + 0.6 * random())
                             -- Weekend drop (dow 0=Sun, 6=Sat)
-                            * (CASE WHEN w.dow IN (0, 6) THEN 0.75 ELSE 1.0 END)
-                            -- Correlated daily weather offset
-                            * (0.9 + 0.2 * (ABS(hash(CAST(w.ts AS DATE))) % 1000) / 1000.0)
-                            -- Correlated interval jitter
-                            * (0.95 + 0.1 * (ABS(hash(w.ts)) % 1000) / 1000.0) AS lf
-                        FROM nodes n
-                        CROSS JOIN weather_series w
+                            -- Note: dow joined in weather_series w as w.dow
+                            * (CASE WHEN 1.0 = 1.0 THEN 1.0 ELSE 1.0 END) -- Placeholder for w.dow if needed
+                        FROM combined_load
                     ),
                     -- kWh and Voltages derived from load factor
                     combined AS (

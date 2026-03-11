@@ -58,7 +58,7 @@ class CalculateAggregateConsumptionUseCase:
                 
             time_series = [
                 {
-                    "timestamp": row[0].isoformat(),
+                    "timestamp": row[0].isoformat() + "Z",
                     "kwh_delivered": row[1],
                     "total_current": row[2],
                     "median_voltage_a": row[3],

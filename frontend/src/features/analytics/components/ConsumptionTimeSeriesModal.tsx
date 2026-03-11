@@ -56,7 +56,7 @@ export function ConsumptionTimeSeriesModal({
 
         return data.filter(d => {
             const date = new Date(d.timestamp);
-            const month = date.getMonth();
+            const month = date.getUTCMonth();
 
             return sM <= eM
                 ? (month >= sM && month <= eM)
@@ -70,7 +70,7 @@ export function ConsumptionTimeSeriesModal({
 
         return filteredByMonth.filter(d => {
             const date = new Date(d.timestamp);
-            const hour = date.getHours();
+            const hour = date.getUTCHours();
 
             return sH <= eH
                 ? (hour >= sH && hour <= eH)
@@ -188,9 +188,12 @@ export function ConsumptionTimeSeriesModal({
 
         filteredByMonth.forEach(d => {
             if (d.kwh_delivered != null) {
-                const hour = new Date(d.timestamp).getHours();
-                buckets[hour].total += d.kwh_delivered;
-                buckets[hour].count += 1;
+                const date = new Date(d.timestamp);
+                const hour = date.getUTCHours(); // Use UTC to match stored 'weather local' hour
+                if (hour >= 0 && hour < 24) {
+                    buckets[hour].total += d.kwh_delivered;
+                    buckets[hour].count += 1;
+                }
             }
         });
 
@@ -207,7 +210,7 @@ export function ConsumptionTimeSeriesModal({
 
         data.forEach((d) => {
             const date = new Date(d.timestamp);
-            const month = date.getMonth();
+            const month = date.getUTCMonth();
             const timestamp = date.getTime();
 
             // Month boundary marker
@@ -330,6 +333,7 @@ export function ConsumptionTimeSeriesModal({
                                             borderColor: '#373A40',
                                             textStyle: { color: '#C1C2C5', fontSize: 11 }
                                         },
+                                        useUTC: true,
                                         legend: {
                                             data: ['kWh Delivered', 'Temp (24h Avg)'],
                                             textStyle: { color: '#A6A7AB', fontSize: 10 },

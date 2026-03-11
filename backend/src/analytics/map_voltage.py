@@ -26,11 +26,14 @@ class MapVoltageUseCase:
         """
         nodes_list_filter = ""
         nodes_to_query = []
+        query_params = [start_time, end_time]
+
         if start_node_id:
             downstream_nodes, _ = self.graph_engine.find_downstream(start_node_id)
             nodes_to_query = downstream_nodes if downstream_nodes else [start_node_id]
-            nodes_list_str = "'" + "','".join(nodes_to_query) + "'"
-            nodes_list_filter = f"AND node_id IN ({nodes_list_str})"
+            placeholders = ",".join(["?"] * len(nodes_to_query))
+            nodes_list_filter = f"AND node_id IN ({placeholders})"
+            query_params.extend(nodes_to_query)
 
         agg_func = "AVG"
         if agg == "min":
@@ -44,8 +47,8 @@ class MapVoltageUseCase:
         node_avg_query = f"""
             SELECT node_id, {agg_func}(voltage_a) as v
             FROM read_parquet('{self.parquet_dir}/*.parquet')
-            WHERE timestamp >= '{start_time}'
-              AND timestamp <= '{end_time}'
+            WHERE timestamp >= ?
+              AND timestamp <= ?
               AND voltage_a IS NOT NULL
               {nodes_list_filter}
             GROUP BY node_id
@@ -53,7 +56,7 @@ class MapVoltageUseCase:
         
         try:
             with duckdb.connect(self.db_path, read_only=True) as conn:
-                node_avg_results = conn.execute(node_avg_query).fetchall()
+                node_avg_results = conn.execute(node_avg_query, query_params).fetchall()
                 
             node_voltages = {row[0]: float(row[1]) for row in node_avg_results if row[1] is not None}
                 

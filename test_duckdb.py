@@ -1,25 +1,15 @@
 import duckdb
+conn = duckdb.connect(':memory:')
+conn.execute('CREATE TABLE test (timestamp VARCHAR, node_id VARCHAR, voltage_a FLOAT)')
+conn.execute("INSERT INTO test VALUES ('2023-01-01', 'node1', 120.0), ('2023-01-02', 'node2', 121.0)")
 
-conn = duckdb.connect("grid_data_cim.duckdb", read_only=True)
 query = """
-SELECT 
-    timestamp,
-    
-    -- Phase A
-    MIN(voltage_a) as min_a,
-    approx_quantile(voltage_a, 0.25) as p25_a,
-    MEDIAN(voltage_a) as median_a,
-    approx_quantile(voltage_a, 0.75) as p75_a,
-    MAX(voltage_a) as max_a
-FROM read_parquet('readings/*.parquet')
-WHERE node_id IN ('3FE0C37D-1892-4EAF-8518-7FA762527D01') 
-    AND timestamp >= '2026-02-27T04:37:38' 
-    AND timestamp <= '2026-03-06T04:37:38'
-GROUP BY timestamp
-ORDER BY timestamp ASC
+    SELECT node_id, AVG(voltage_a) as v
+    FROM test
+    WHERE timestamp >= ?
+      AND timestamp <= ?
+      AND voltage_a IS NOT NULL
+      AND node_id IN (?, ?)
+    GROUP BY node_id
 """
-
-try:
-    print(conn.execute(query).fetchall())
-except Exception as e:
-    print("ERROR:", e)
+print(conn.execute(query, ['2023-01-01', '2023-01-03', 'node1', 'node2']).fetchall())

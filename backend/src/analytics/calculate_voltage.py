@@ -30,34 +30,38 @@ class CalculateVoltageDistributionUseCase:
         # If no downstream (leaf node like a Meter), query the node itself
         nodes_to_query = downstream_nodes if downstream_nodes else [start_node_id]
             
-        # Format for SQL IN clause
-        nodes_list = "'" + "','".join(nodes_to_query) + "'"
+        # In DuckDB, to parameterize timestamps in a query against Parquet files
+        # using a simple string might fail if not casted to timestamp explicitly,
+        # so we cast parameters explicitly to avoid 'Cannot compare values of type TIMESTAMP and type VARCHAR'
+
+        # Format for SQL IN clause placeholders
+        placeholders = ",".join(["?"] * len(nodes_to_query))
         
         query = f"""
             WITH a_bins AS (
                 SELECT ROUND(voltage_a * 2) / 2.0 as v_bin, COUNT(*) as cnt_a
                 FROM read_parquet('{self.parquet_dir}/*.parquet')
-                WHERE node_id IN ({nodes_list})
-                  AND timestamp >= '{start_time}' 
-                  AND timestamp <= '{end_time}'
+                WHERE node_id IN ({placeholders})
+                  AND timestamp >= CAST(? AS TIMESTAMP)
+                  AND timestamp <= CAST(? AS TIMESTAMP)
                   AND voltage_a IS NOT NULL
                 GROUP BY 1
             ),
             b_bins AS (
                 SELECT ROUND(voltage_b * 2) / 2.0 as v_bin, COUNT(*) as cnt_b
                 FROM read_parquet('{self.parquet_dir}/*.parquet')
-                WHERE node_id IN ({nodes_list})
-                  AND timestamp >= '{start_time}' 
-                  AND timestamp <= '{end_time}'
+                WHERE node_id IN ({placeholders})
+                  AND timestamp >= CAST(? AS TIMESTAMP)
+                  AND timestamp <= CAST(? AS TIMESTAMP)
                   AND voltage_b IS NOT NULL
                 GROUP BY 1
             ),
             c_bins AS (
                 SELECT ROUND(voltage_c * 2) / 2.0 as v_bin, COUNT(*) as cnt_c
                 FROM read_parquet('{self.parquet_dir}/*.parquet')
-                WHERE node_id IN ({nodes_list})
-                  AND timestamp >= '{start_time}' 
-                  AND timestamp <= '{end_time}'
+                WHERE node_id IN ({placeholders})
+                  AND timestamp >= CAST(? AS TIMESTAMP)
+                  AND timestamp <= CAST(? AS TIMESTAMP)
                   AND voltage_c IS NOT NULL
                 GROUP BY 1
             ),
@@ -84,9 +88,9 @@ class CalculateVoltageDistributionUseCase:
                 WITH total_loading AS (
                     SELECT timestamp, SUM(kwh_dlv) as total_kwh
                     FROM read_parquet('{self.parquet_dir}/*.parquet')
-                    WHERE node_id IN ({nodes_list})
-                      AND timestamp >= '{start_time}'
-                      AND timestamp <= '{end_time}'
+                    WHERE node_id IN ({placeholders})
+                      AND timestamp >= CAST(? AS TIMESTAMP)
+                      AND timestamp <= CAST(? AS TIMESTAMP)
                     GROUP BY timestamp
                 )
                 SELECT 
@@ -95,9 +99,9 @@ class CalculateVoltageDistributionUseCase:
                     CAST(COUNT(*) AS INTEGER) as cnt
                 FROM read_parquet('{self.parquet_dir}/*.parquet') r
                 JOIN total_loading t ON r.timestamp = t.timestamp
-                WHERE r.node_id IN ({nodes_list})
-                  AND r.timestamp >= '{start_time}' 
-                  AND r.timestamp <= '{end_time}'
+                WHERE r.node_id IN ({placeholders})
+                  AND r.timestamp >= CAST(? AS TIMESTAMP)
+                  AND r.timestamp <= CAST(? AS TIMESTAMP)
                   AND r.voltage_a IS NOT NULL
                   AND t.total_kwh IS NOT NULL
                 GROUP BY 1, 2
@@ -111,19 +115,29 @@ class CalculateVoltageDistributionUseCase:
                 QUANTILE_CONT(voltage_a, 0.1) as p10,
                 QUANTILE_CONT(voltage_a, 0.9) as p90
             FROM read_parquet('{self.parquet_dir}/*.parquet')
-            WHERE node_id IN ({nodes_list})
-              AND timestamp >= '{start_time}' 
-              AND timestamp <= '{end_time}'
+            WHERE node_id IN ({placeholders})
+              AND timestamp >= CAST(? AS TIMESTAMP)
+              AND timestamp <= CAST(? AS TIMESTAMP)
               AND voltage_a IS NOT NULL
             GROUP BY 1
             ORDER BY 1
         """
 
         try:
+            # Parameters for main query (used 3 times in a_bins, b_bins, c_bins)
+            base_params = nodes_to_query + [start_time, end_time]
+            query_params = base_params * 3
+
+            # Parameters for heatmap query (used 2 times)
+            heatmap_params = base_params * 2
+
+            # Parameters for timeseries query (used 1 time)
+            timeseries_params = base_params
+
             with duckdb.connect(self.db_path, read_only=True) as conn:
-                results = conn.execute(query).fetchall()
-                heat_results = conn.execute(heatmap_query).fetchall()
-                ts_results = conn.execute(timeseries_query).fetchall()
+                results = conn.execute(query, query_params).fetchall()
+                heat_results = conn.execute(heatmap_query, heatmap_params).fetchall()
+                ts_results = conn.execute(timeseries_query, timeseries_params).fetchall()
                 
             distribution = []
             for row in results:

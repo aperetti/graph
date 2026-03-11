@@ -1,5 +1,5 @@
-import { useState, useMemo } from 'react';
-import { Paper, Group, Title, ActionIcon, Box, Text, Stack, Select, NumberInput, SimpleGrid, Collapse, Button } from '@mantine/core';
+import { useState, useMemo, useEffect } from 'react';
+import { Paper, Group, Title, ActionIcon, Box, Text, Stack, Select, Slider, SimpleGrid, Collapse, Button } from '@mantine/core';
 import { X, Filter, ChevronDown, ChevronUp } from 'lucide-react';
 import ReactECharts from 'echarts-for-react';
 
@@ -48,8 +48,25 @@ export function ConsumptionTimeSeriesModal({
     const [endHour, setEndHour] = useState<string>('23');
     const [startMonth, setStartMonth] = useState<string>('0');
     const [endMonth, setEndMonth] = useState<string>('11');
-    const [targetTemp, setTargetTemp] = useState<number | string>(20);
+    const [winterTarget, setWinterTarget] = useState<number>(-5);
+    const [summerTarget, setSummerTarget] = useState<number>(30);
     const [showFilters, setShowFilters] = useState<boolean>(false);
+
+    useEffect(() => {
+        if (isOpen && data && data.length > 0) {
+            let minMonth = 11;
+            let maxMonth = 0;
+
+            for (let i = 0; i < data.length; i++) {
+                const m = new Date(data[i].timestamp).getUTCMonth();
+                if (m < minMonth) minMonth = m;
+                if (m > maxMonth) maxMonth = m;
+            }
+
+            setStartMonth(minMonth.toString());
+            setEndMonth(maxMonth.toString());
+        }
+    }, [isOpen, data]);
 
     const filteredByMonth = useMemo(() => {
         const sM = parseInt(startMonth);
@@ -79,39 +96,55 @@ export function ConsumptionTimeSeriesModal({
         });
     }, [filteredByMonth, startHour, endHour]);
 
-    const regression = useMemo(() => {
-        const points = filteredData
-            .filter((d): d is ReadingData & { temperature: number; kwh_delivered: number } =>
-                d.temperature != null && d.kwh_delivered != null
-            )
-            .map(d => ({ x: d.temperature, y: d.kwh_delivered }));
+    const seasonalData = useMemo(() => {
+        const summerPoints: { x: number; y: number }[] = [];
+        const winterPoints: { x: number; y: number }[] = [];
+        const neutralPoints: { x: number; y: number }[] = [];
 
-        if (points.length < 2) return null;
+        filteredData.forEach(d => {
+            if (d.temperature != null && d.kwh_delivered != null) {
+                const date = new Date(d.timestamp);
+                const month = date.getUTCMonth();
+                const p = { x: d.temperature, y: d.kwh_delivered };
 
-        const n = points.length;
-        let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
-        let minX = points[0].x, maxX = points[0].x;
+                // Summer: May (4) to October (9)  -> We'll adjust to May to Sep (4 to 8)
+                if (month >= 4 && month <= 8) {
+                    summerPoints.push(p);
+                }
+                // Winter: Nov to Mar (10, 11, 0, 1, 2)
+                else if (month >= 10 || month <= 2) {
+                    winterPoints.push(p);
+                }
+                // Neutral: April (3), October (9)
+                else {
+                    neutralPoints.push(p);
+                }
+            }
+        });
 
-        for (const p of points) {
-            sumX += p.x;
-            sumY += p.y;
-            sumXY += p.x * p.y;
-            sumX2 += p.x * p.x;
-            if (p.x < minX) minX = p.x;
-            if (p.x > maxX) maxX = p.x;
-        }
-
-        const denominator = (n * sumX2 - sumX * sumX);
-        if (denominator === 0) return null;
-
-        const slope = (n * sumXY - sumX * sumY) / denominator;
-        const intercept = (sumY - slope * sumX) / n;
+        const calcReg = (points: { x: number, y: number }[]) => {
+            if (points.length < 2) return null;
+            const n = points.length;
+            let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
+            let minX = points[0].x, maxX = points[0].x;
+            for (const p of points) {
+                sumX += p.x; sumY += p.y; sumXY += p.x * p.y; sumX2 += p.x * p.x;
+                if (p.x < minX) minX = p.x;
+                if (p.x > maxX) maxX = p.x;
+            }
+            const denominator = (n * sumX2 - sumX * sumX);
+            if (denominator === 0) return null;
+            const slope = (n * sumXY - sumX * sumY) / denominator;
+            const intercept = (sumY - slope * sumX) / n;
+            return { start: [minX, slope * minX + intercept], end: [maxX, slope * maxX + intercept], slope, intercept };
+        };
 
         return {
-            start: [minX, slope * minX + intercept],
-            end: [maxX, slope * maxX + intercept],
-            slope,
-            intercept
+            summer: calcReg(summerPoints),
+            winter: calcReg(winterPoints),
+            summerRaw: summerPoints,
+            winterRaw: winterPoints,
+            neutralRaw: neutralPoints
         };
     }, [filteredData]);
 
@@ -358,7 +391,11 @@ export function ConsumptionTimeSeriesModal({
                                             textStyle: { color: '#A6A7AB', fontSize: 10 },
                                             top: 0
                                         },
-                                        grid: { left: 40, right: 40, bottom: 25, top: 45, containLabel: true },
+                                        grid: { left: 40, right: 40, bottom: 35, top: 45, containLabel: true },
+                                        dataZoom: [
+                                            { type: 'inside', start: 0, end: 100 },
+                                            { type: 'slider', start: 0, end: 100, height: 15, bottom: 10, textStyle: { color: '#A6A7AB' }, borderColor: '#373A40', fillerColor: 'rgba(51, 154, 240, 0.2)' }
+                                        ],
                                         xAxis: {
                                             type: 'time',
                                             axisLabel: {
@@ -471,28 +508,50 @@ export function ConsumptionTimeSeriesModal({
                                     />
                                 </Box>
 
-                                <Box style={{ height: 380 }}>
-                                    <Text size="xs" fw={700} c="dimmed" mb={4} ta="center">Load vs Temperature Correlation (Filtered)</Text>
-                                    <Group grow mb="sm" px="xs" align="flex-end">
-                                        <NumberInput
-                                            size="xs"
-                                            label="Target Temp (°C)"
-                                            value={targetTemp}
-                                            onChange={setTargetTemp}
-                                            step={0.5}
-                                            styles={{ input: { backgroundColor: '#1A1B1E', color: '#A6A7AB', border: '1px solid #373A40' } }}
-                                        />
-                                        <Stack gap={2}>
-                                            <Text size="xs" c="dimmed" fw={500}>Predicted Load</Text>
-                                            <Paper p="xs" withBorder style={{ backgroundColor: '#25262B', borderColor: '#373A40' }}>
-                                                <Text fw={700} size="md" c="yellow" ta="center">
-                                                    {regression && typeof targetTemp === 'number'
-                                                        ? (regression.slope * targetTemp + regression.intercept).toFixed(3) + ' kWh'
-                                                        : '---'}
-                                                </Text>
-                                            </Paper>
-                                        </Stack>
-                                    </Group>
+                                <Box style={{ height: 420 }}>
+                                    <Text size="xs" fw={700} c="dimmed" mb={12} ta="center">Load vs Temperature Correlation (Filtered)</Text>
+                                    <SimpleGrid cols={2} mb="xl" px="xs">
+                                        <Box px="md">
+                                            <Text size="xs" fw={500} c="blue" mb={6}>Winter Target: {winterTarget}°C</Text>
+                                            <Slider
+                                                value={winterTarget}
+                                                onChange={setWinterTarget}
+                                                min={-15}
+                                                max={40}
+                                                step={0.5}
+                                                marks={[
+                                                    { value: -10, label: '-10' },
+                                                    { value: 0, label: '0' },
+                                                    { value: 10, label: '10' },
+                                                    { value: 20, label: '20' },
+                                                    { value: 30, label: '30' },
+                                                    { value: 40, label: '40' }
+                                                ]}
+                                                color="blue"
+                                                styles={{ markLabel: { fontSize: 9, color: '#A6A7AB', marginTop: 5 } }}
+                                            />
+                                        </Box>
+                                        <Box px="md">
+                                            <Text size="xs" fw={500} c="red" mb={6}>Summer Target: {summerTarget}°C</Text>
+                                            <Slider
+                                                value={summerTarget}
+                                                onChange={setSummerTarget}
+                                                min={-15}
+                                                max={40}
+                                                step={0.5}
+                                                marks={[
+                                                    { value: -10, label: '-10' },
+                                                    { value: 0, label: '0' },
+                                                    { value: 10, label: '10' },
+                                                    { value: 20, label: '20' },
+                                                    { value: 30, label: '30' },
+                                                    { value: 40, label: '40' }
+                                                ]}
+                                                color="red"
+                                                styles={{ markLabel: { fontSize: 9, color: '#A6A7AB', marginTop: 5 } }}
+                                            />
+                                        </Box>
+                                    </SimpleGrid>
                                     <ReactECharts
                                         style={{ height: 260, width: '100%' }}
                                         option={{
@@ -512,43 +571,91 @@ export function ConsumptionTimeSeriesModal({
                                             },
                                             series: [
                                                 {
-                                                    name: 'Data Points',
+                                                    name: 'Summer Points',
                                                     type: 'scatter',
-                                                    data: filteredData.map(d => [d.temperature, d.kwh_delivered]),
-                                                    itemStyle: { color: '#ffec99', opacity: 0.6 },
+                                                    data: seasonalData.summerRaw.map(d => [d.x, d.y]),
+                                                    itemStyle: { color: '#fa5252', opacity: 0.5 },
                                                     symbolSize: 6,
                                                 },
-                                                regression && {
-                                                    name: 'Linear Regression',
+                                                {
+                                                    name: 'Winter Points',
+                                                    type: 'scatter',
+                                                    data: seasonalData.winterRaw.map(d => [d.x, d.y]),
+                                                    itemStyle: { color: '#339af0', opacity: 0.5 },
+                                                    symbolSize: 6,
+                                                },
+                                                {
+                                                    name: 'Transition Points',
+                                                    type: 'scatter',
+                                                    data: seasonalData.neutralRaw.map(d => [d.x, d.y]),
+                                                    itemStyle: { color: '#868e96', opacity: 0.5 },
+                                                    symbolSize: 6,
+                                                },
+                                                seasonalData.summer && {
+                                                    name: 'Summer Regression',
                                                     type: 'line',
-                                                    data: [regression.start, regression.end],
-                                                    itemStyle: { color: '#fa5252' },
+                                                    data: [seasonalData.summer.start, seasonalData.summer.end],
+                                                    itemStyle: { color: '#e03131' },
                                                     showSymbol: false,
                                                     lineStyle: { width: 2, type: 'dashed' },
                                                     smooth: false
                                                 },
-                                                regression && typeof targetTemp === 'number' && {
-                                                    name: 'Target Prediction',
+                                                seasonalData.winter && {
+                                                    name: 'Winter Regression',
+                                                    type: 'line',
+                                                    data: [seasonalData.winter.start, seasonalData.winter.end],
+                                                    itemStyle: { color: '#1c7ed6' },
+                                                    showSymbol: false,
+                                                    lineStyle: { width: 2, type: 'dashed' },
+                                                    smooth: false
+                                                },
+                                                seasonalData.summer && {
+                                                    name: 'Summer Target',
                                                     type: 'scatter',
-                                                    data: [[targetTemp, regression.slope * targetTemp + regression.intercept]],
+                                                    data: [[summerTarget, seasonalData.summer.slope * summerTarget + seasonalData.summer.intercept]],
                                                     itemStyle: {
-                                                        color: '#ffd43b',
+                                                        color: '#e03131',
                                                         borderColor: '#fff',
                                                         borderWidth: 1,
                                                         shadowBlur: 5,
-                                                        shadowColor: 'rgba(255, 212, 59, 0.8)'
+                                                        shadowColor: 'rgba(224, 49, 49, 0.8)'
                                                     },
                                                     symbolSize: 12,
                                                     symbol: 'diamond',
                                                     label: {
                                                         show: true,
-                                                        formatter: 'Target',
+                                                        formatter: (params: any) => `Summer: ${params.value[1].toFixed(2)} kWh`,
                                                         position: 'top',
                                                         color: '#fff',
-                                                        fontSize: 9,
+                                                        fontSize: 10,
                                                         fontWeight: 'bold',
-                                                        backgroundColor: 'rgba(0,0,0,0.5)',
-                                                        padding: [1, 2],
+                                                        backgroundColor: 'rgba(0,0,0,0.6)',
+                                                        padding: [2, 4],
+                                                        borderRadius: 2
+                                                    }
+                                                },
+                                                seasonalData.winter && {
+                                                    name: 'Winter Target',
+                                                    type: 'scatter',
+                                                    data: [[winterTarget, seasonalData.winter.slope * winterTarget + seasonalData.winter.intercept]],
+                                                    itemStyle: {
+                                                        color: '#1c7ed6',
+                                                        borderColor: '#fff',
+                                                        borderWidth: 1,
+                                                        shadowBlur: 5,
+                                                        shadowColor: 'rgba(28, 126, 214, 0.8)'
+                                                    },
+                                                    symbolSize: 12,
+                                                    symbol: 'diamond',
+                                                    label: {
+                                                        show: true,
+                                                        formatter: (params: any) => `Winter: ${params.value[1].toFixed(2)} kWh`,
+                                                        position: 'bottom',
+                                                        color: '#fff',
+                                                        fontSize: 10,
+                                                        fontWeight: 'bold',
+                                                        backgroundColor: 'rgba(0,0,0,0.6)',
+                                                        padding: [2, 4],
                                                         borderRadius: 2
                                                     }
                                                 }

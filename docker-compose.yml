@@ -53,6 +53,7 @@ services:
       - CIM_MODEL_PATH=/app/sample_data/IEEE8500.xml
       - WEATHER_DATA_PATH=/app/sample_data/weather.epw
     entrypoint: [ "sh", "./scripts/bootstrap.sh" ]
+    profiles: [ "tools" ]
     deploy:
       resources:
         limits:

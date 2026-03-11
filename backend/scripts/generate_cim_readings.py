@@ -229,7 +229,7 @@ def main():
                             CASE WHEN list_contains(phases_present, 'C')
                                 THEN ROUND(2.0 + lf * 25.0, 3) END AS current_c
 
-                        FROM combined_load
+                        FROM final_load
                     )
                     SELECT * FROM combined
                     ORDER BY node_id, timestamp

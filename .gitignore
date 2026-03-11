@@ -28,3 +28,4 @@ yarn-error.log*
 # OS
 .DS_Store
 Thumbs.db
+grid_data_cim.duckdb.wal

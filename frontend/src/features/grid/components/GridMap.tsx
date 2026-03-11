@@ -295,7 +295,7 @@ export const GridMap = React.memo<GridMapProps>(({
                 if (info.object) onNodeClick(info.object);
             }
         })
-    ], [nodes, edges, hoveredNodeId, hoveredEdgeId, highlightedNodes, nodeAverages, voltageScale, onNodeClick, viewState.zoom]);
+    ], [nodes, edges, hoveredNodeId, hoveredEdgeId, highlightedNodes, highlightedEdges, selectedNodeId, switchPositions, nodeAverages, voltageScale, onNodeClick, viewState.zoom]);
 
     return (
         <div

@@ -1,6 +1,6 @@
-import { memo } from 'react';
-import { Paper, Group, Title, ActionIcon, Box, Text, Select, Grid } from '@mantine/core';
-import { X } from 'lucide-react';
+import { memo, useState } from 'react';
+import { Paper, Group, Title, ActionIcon, Box, Text, Select, Grid, Collapse, Button } from '@mantine/core';
+import { X, Filter, ChevronDown, ChevronUp } from 'lucide-react';
 import ReactECharts from 'echarts-for-react';
 
 interface Props {
@@ -26,6 +26,8 @@ export const VoltageDistributionModal = memo(function VoltageDistributionModal({
     degrees,
     onDegreesChange
 }: Props) {
+    const [showFilters, setShowFilters] = useState<boolean>(false);
+
     if (!isOpen) return null;
 
     return (
@@ -46,36 +48,53 @@ export const VoltageDistributionModal = memo(function VoltageDistributionModal({
                 flexDirection: 'column'
             }}
         >
-            <Group justify="space-between" align="flex-start" wrap="wrap" px="md" py="xs" style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-                <Group gap="xl" wrap="wrap">
-                    <Title order={5}>Voltage Analysis: {nodeName}</Title>
-                    <Group gap="xs" wrap="wrap">
-                        <Text size="xs" c="dimmed">Search Depth:</Text>
-                        <Select
+            <Box px="md" py="xs" style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                <Group justify="space-between" align="center" wrap="nowrap">
+                    <Title order={5} truncate>Voltage Analysis: {nodeName}</Title>
+                    <Group wrap="nowrap" gap="xs">
+                        <Button
+                            variant="subtle"
                             size="xs"
-                            w={120}
-                            value={degrees === null ? 'downstream' : degrees.toString()}
-                            onChange={(val: string | null) => {
-                                if (val === null) return;
-                                onDegreesChange(val === 'downstream' ? null : parseInt(val));
-                            }}
-                            allowDeselect={false}
-                            data={[
-                                { label: 'Strictly Downstream', value: 'downstream' },
-                                { label: '1 Degree (Proximal)', value: '1' },
-                                { label: '2 Degrees', value: '2' },
-                                { label: '3 Degrees', value: '3' },
-                                { label: '4 Degrees', value: '4' },
-                                { label: '5 Degrees', value: '5' },
-                                { label: '10 Degrees', value: '10' },
-                            ]}
-                        />
+                            color="gray"
+                            leftSection={<Filter size={14} />}
+                            rightSection={showFilters ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                            onClick={() => setShowFilters(!showFilters)}
+                        >
+                            Filters
+                        </Button>
+                        <ActionIcon variant="subtle" onClick={onClose}>
+                            <X size={16} />
+                        </ActionIcon>
                     </Group>
                 </Group>
-                <ActionIcon variant="subtle" onClick={onClose}>
-                    <X size={16} />
-                </ActionIcon>
-            </Group>
+
+                <Collapse in={showFilters}>
+                    <Box mt="md" mb="xs">
+                        <Group gap="xs" wrap="wrap">
+                            <Text size="xs" c="dimmed">Search Depth:</Text>
+                            <Select
+                                size="xs"
+                                w={120}
+                                value={degrees === null ? 'downstream' : degrees.toString()}
+                                onChange={(val: string | null) => {
+                                    if (val === null) return;
+                                    onDegreesChange(val === 'downstream' ? null : parseInt(val));
+                                }}
+                                allowDeselect={false}
+                                data={[
+                                    { label: 'Strictly Downstream', value: 'downstream' },
+                                    { label: '1 Degree (Proximal)', value: '1' },
+                                    { label: '2 Degrees', value: '2' },
+                                    { label: '3 Degrees', value: '3' },
+                                    { label: '4 Degrees', value: '4' },
+                                    { label: '5 Degrees', value: '5' },
+                                    { label: '10 Degrees', value: '10' },
+                                ]}
+                            />
+                        </Group>
+                    </Box>
+                </Collapse>
+            </Box>
 
             <Box style={{ flex: 1, position: 'relative', width: '100%', overflow: 'hidden', padding: '10px' }}>
                 {loading ? (

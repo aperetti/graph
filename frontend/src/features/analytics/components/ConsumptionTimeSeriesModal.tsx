@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
-import { Paper, Group, Title, ActionIcon, Box, Text, Stack, Select, NumberInput, SimpleGrid } from '@mantine/core';
-import { X } from 'lucide-react';
+import { Paper, Group, Title, ActionIcon, Box, Text, Stack, Select, NumberInput, SimpleGrid, Collapse, Button } from '@mantine/core';
+import { X, Filter, ChevronDown, ChevronUp } from 'lucide-react';
 import ReactECharts from 'echarts-for-react';
 
 interface ReadingData {
@@ -49,6 +49,7 @@ export function ConsumptionTimeSeriesModal({
     const [startMonth, setStartMonth] = useState<string>('0');
     const [endMonth, setEndMonth] = useState<string>('11');
     const [targetTemp, setTargetTemp] = useState<number | string>(20);
+    const [showFilters, setShowFilters] = useState<boolean>(false);
 
     const filteredByMonth = useMemo(() => {
         const sM = parseInt(startMonth);
@@ -254,61 +255,79 @@ export function ConsumptionTimeSeriesModal({
                 flexDirection: 'column'
             }}
         >
-            <Group justify="space-between" align="flex-start" wrap="wrap" px="md" py="xs" style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-                <Group gap="xl" wrap="wrap">
-                    <Title order={5}>Grid Analytics: {nodeName}</Title>
-
-                    <Group gap="xs" wrap="wrap">
-                        <Text size="xs" c="dimmed">Month Range:</Text>
-                        <Select
-                            id="select-month-start"
-                            data={MONTH_OPTIONS}
-                            value={startMonth}
-                            onChange={(v) => v && setStartMonth(v)}
+            <Box px="md" py="xs" style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                <Group justify="space-between" align="center" wrap="nowrap">
+                    <Title order={5} truncate>Grid Analytics: {nodeName}</Title>
+                    <Group wrap="nowrap" gap="xs">
+                        <Button
+                            variant="subtle"
                             size="xs"
-                            w={80}
-                            comboboxProps={{ withinPortal: true, zIndex: 2000 }}
-                        />
-                        <Text size="xs" c="dimmed">to</Text>
-                        <Select
-                            id="select-month-end"
-                            data={MONTH_OPTIONS}
-                            value={endMonth}
-                            onChange={(v) => v && setEndMonth(v)}
-                            size="xs"
-                            w={80}
-                            comboboxProps={{ withinPortal: true, zIndex: 2000 }}
-                        />
+                            color="gray"
+                            leftSection={<Filter size={14} />}
+                            rightSection={showFilters ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                            onClick={() => setShowFilters(!showFilters)}
+                        >
+                            Filters
+                        </Button>
+                        <ActionIcon variant="subtle" onClick={onClose}>
+                            <X size={16} />
+                        </ActionIcon>
                     </Group>
-
-                    <Group gap="xs" wrap="wrap">
-                        <Text size="xs" c="dimmed">Time Range (Slicer):</Text>
-                        <Select
-                            id="select-hour-start"
-                            data={HOUR_OPTIONS}
-                            value={startHour}
-                            onChange={(v) => v && setStartHour(v)}
-                            size="xs"
-                            w={90}
-                            comboboxProps={{ withinPortal: true, zIndex: 2000 }}
-                        />
-                        <Text size="xs" c="dimmed">to</Text>
-                        <Select
-                            id="select-hour-end"
-                            data={HOUR_OPTIONS}
-                            value={endHour}
-                            onChange={(v) => v && setEndHour(v)}
-                            size="xs"
-                            w={90}
-                            comboboxProps={{ withinPortal: true, zIndex: 2000 }}
-                        />
-                    </Group>
-                    <Text size="xs" c="dimmed" style={{ fontStyle: 'italic' }}>*Month slicer affects Daily Profile; Hour slicer affects Correlation</Text>
                 </Group>
-                <ActionIcon variant="subtle" onClick={onClose}>
-                    <X size={16} />
-                </ActionIcon>
-            </Group>
+
+                <Collapse in={showFilters}>
+                    <Box mt="md" mb="xs">
+                        <Group gap="xl" wrap="wrap">
+                            <Group gap="xs" wrap="wrap">
+                                <Text size="xs" c="dimmed">Month Range:</Text>
+                                <Select
+                                    id="select-month-start"
+                                    data={MONTH_OPTIONS}
+                                    value={startMonth}
+                                    onChange={(v) => v && setStartMonth(v)}
+                                    size="xs"
+                                    w={80}
+                                    comboboxProps={{ withinPortal: true, zIndex: 2000 }}
+                                />
+                                <Text size="xs" c="dimmed">to</Text>
+                                <Select
+                                    id="select-month-end"
+                                    data={MONTH_OPTIONS}
+                                    value={endMonth}
+                                    onChange={(v) => v && setEndMonth(v)}
+                                    size="xs"
+                                    w={80}
+                                    comboboxProps={{ withinPortal: true, zIndex: 2000 }}
+                                />
+                            </Group>
+
+                            <Group gap="xs" wrap="wrap">
+                                <Text size="xs" c="dimmed">Time Range (Slicer):</Text>
+                                <Select
+                                    id="select-hour-start"
+                                    data={HOUR_OPTIONS}
+                                    value={startHour}
+                                    onChange={(v) => v && setStartHour(v)}
+                                    size="xs"
+                                    w={90}
+                                    comboboxProps={{ withinPortal: true, zIndex: 2000 }}
+                                />
+                                <Text size="xs" c="dimmed">to</Text>
+                                <Select
+                                    id="select-hour-end"
+                                    data={HOUR_OPTIONS}
+                                    value={endHour}
+                                    onChange={(v) => v && setEndHour(v)}
+                                    size="xs"
+                                    w={90}
+                                    comboboxProps={{ withinPortal: true, zIndex: 2000 }}
+                                />
+                            </Group>
+                            <Text size="xs" c="dimmed" style={{ fontStyle: 'italic' }}>*Month slicer affects Daily Profile; Hour slicer affects Correlation</Text>
+                        </Group>
+                    </Box>
+                </Collapse>
+            </Box>
 
             <Box style={{ flex: 1, position: 'relative', width: '100%', overflow: 'hidden', padding: '10px' }}>
                 {loading ? (

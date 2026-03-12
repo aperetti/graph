@@ -12,6 +12,11 @@
   * Power Quality: Instantaneous Voltage (V), Current (I), and Power Factor (PF).
 * **Temporal Alignment**: Ability to aggregate 5-minute, 15-minute, or hourly intervals across thousands of meters simultaneously.
 
+### 1.3 Alarm Data Integration
+* **Meter Association**: Alarms must be associated with specific Meter nodes in the graph.
+* **Alarm Attributes**: Each alarm record should include a timestamp, alarm code (e.g., 'OV_VOLT', 'UV_VOLT', 'TAMPER'), severity level (Low, Medium, High, Critical), and status (Active/Cleared).
+* **Spatial Correlation**: Ability to visualize alarms geospatially to identify cluster failures (e.g., a transformer outage affecting all downstream meters).
+
 ## 2. Analytical Agent Capabilities
 ### 2.1 Graph Navigation & Discovery
 * **Downstream Discovery**: Given a Device_ID (e.g., a specific Fuse), the agent must identify all downstream Transformers and their associated Meters.

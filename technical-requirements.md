@@ -21,6 +21,9 @@
     *   **Time Series Endpoints:** Endpoints to fetch consumption metrics must support dynamic start/end ISO strings to fulfill UI ranges (1W, 1M, 1Y).
     *   Existing Endpoints: Re-use `/api/analytics/phase-balance/{node_id}` to calculate the downstream aggregations upon node click.
     *   **Synthetic AMI Generation:** Generate synthetic AMI time-series metrics traversing from 2025 through 2027.
+    *   **Alarms Dataset Integration**:
+        *   **Relational Storage**: Active alarms and metadata stored in a dedicated `alarms` table in DuckDB.
+        *   **Log Storage**: Historical alarm logs should be stored in Parquet format in `cim_alarms/` directory for high-performance temporal queries.
 
 ## 4. Technology Stack
 * **Language**: Python

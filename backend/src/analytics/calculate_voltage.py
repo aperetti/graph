@@ -1,5 +1,4 @@
 """Use Case: Voltage Distribution."""
-from overrides import overrides
 import duckdb
 from typing import Dict, Any, List
 from src.shared.graph_engine import GraphEngine
@@ -12,25 +11,47 @@ class CalculateVoltageDistributionUseCase:
         self.db_path = db_path
         self.parquet_dir = parquet_dir
         
-    def execute(self, start_node_id: str, start_time: str, end_time: str, degrees: int = None) -> Dict[str, Any]:
-        """
-        Executes the voltage distribution query.
+    def estimate(self, start_node_ids: List[str], start_time: str, end_time: str, degrees: int = None) -> Dict[str, Any]:
+        """Returns the estimated number of rows to be processed for one or more starting nodes."""
+        all_downstream_nodes = set()
+        for node_id in start_node_ids:
+            nodes, _ = self.graph_engine.find_downstream(node_id, max_depth=degrees)
+            all_downstream_nodes.update(nodes)
         
-        Args:
-            start_node_id: The device to start from (e.g., a Transformer).
-            start_time: ISO timestamp string.
-            end_time: ISO timestamp string.
-            degrees: Optional degree limit for the search.
-            
-        Returns:
-            Dictionary with statistical results.
-        """
-        downstream_nodes, downstream_edges = self.graph_engine.find_downstream(start_node_id, max_depth=degrees)
+        nodes_to_query = list(all_downstream_nodes) if all_downstream_nodes else start_node_ids
+        nodes_list = "'" + "','".join(nodes_to_query) + "'"
         
-        # If no downstream (leaf node like a Meter), query the node itself
-        nodes_to_query = downstream_nodes if downstream_nodes else [start_node_id]
+        prefetch_query = f"""
+            SELECT COUNT(*) as estimated_rows
+            FROM read_parquet('{self.parquet_dir}/*.parquet')
+            WHERE node_id IN ({nodes_list})
+              AND timestamp >= '{start_time}' 
+              AND timestamp <= '{end_time}'
+        """
+        
+        try:
+            with duckdb.connect(self.db_path, read_only=True) as conn:
+                prefetch_results = conn.execute(prefetch_query).fetchone()
             
-        # Format for SQL IN clause
+            return {
+                "estimated_rows": prefetch_results[0] if prefetch_results else 0,
+                "node_count": len(nodes_to_query)
+            }
+        except Exception as e:
+            return {"error": str(e)}
+
+    def execute(self, start_node_ids: List[str], start_time: str, end_time: str, degrees: int = None) -> Dict[str, Any]:
+        """
+        Executes the voltage distribution query for one or more starting nodes.
+        """
+        all_downstream_nodes = set()
+        all_downstream_edges = set()
+        for node_id in start_node_ids:
+            nodes, edges = self.graph_engine.find_downstream(node_id, max_depth=degrees)
+            all_downstream_nodes.update(nodes)
+            all_downstream_edges.update(edges)
+            
+        nodes_to_query = list(all_downstream_nodes) if all_downstream_nodes else start_node_ids
         nodes_list = "'" + "','".join(nodes_to_query) + "'"
         
         query = f"""
@@ -119,11 +140,21 @@ class CalculateVoltageDistributionUseCase:
             ORDER BY 1
         """
 
+        stats_query = f"""
+            SELECT AVG(voltage_a), MEDIAN(voltage_a)
+            FROM read_parquet('{self.parquet_dir}/*.parquet')
+            WHERE node_id IN ({nodes_list})
+              AND timestamp >= '{start_time}' 
+              AND timestamp <= '{end_time}'
+              AND voltage_a IS NOT NULL
+        """
+
         try:
             with duckdb.connect(self.db_path, read_only=True) as conn:
                 results = conn.execute(query).fetchall()
                 heat_results = conn.execute(heatmap_query).fetchall()
                 ts_results = conn.execute(timeseries_query).fetchall()
+                overall_stats = conn.execute(stats_query).fetchone()
                 
             distribution = []
             for row in results:
@@ -150,10 +181,13 @@ class CalculateVoltageDistributionUseCase:
             ]
                 
             return {
-                "start_node_id": start_node_id,
+                "start_node_id": start_node_ids[0] if len(start_node_ids) == 1 else "multiple",
+                "start_node_ids": start_node_ids,
                 "node_count": len(nodes_to_query),
                 "downstream_node_ids": nodes_to_query,
-                "downstream_edge_ids": downstream_edges,
+                "downstream_edge_ids": list(all_downstream_edges),
+                "mean_voltage": float(overall_stats[0]) if overall_stats and overall_stats[0] else 0,
+                "median_voltage": float(overall_stats[1]) if overall_stats and overall_stats[1] else 0,
                 "distribution": distribution,
                 "scatter": scatter,
                 "timeseries": timeseries

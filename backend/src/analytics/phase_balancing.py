@@ -46,9 +46,20 @@ class PhaseBalancingUseCase:
             GROUP BY timestamp
         """
         
+        prefetch_query = f"""
+            SELECT COUNT(*) as estimated_rows
+            FROM read_parquet('{self.parquet_dir}/*.parquet')
+            WHERE node_id IN ({nodes_list})
+              AND timestamp >= '{start_time}' 
+              AND timestamp <= '{end_time}'
+        """
+        
         try:
             with duckdb.connect(self.db_path, read_only=True) as conn:
+                prefetch_results = conn.execute(prefetch_query).fetchone()
                 results = conn.execute(query).fetchall()
+                
+            estimated_rows = prefetch_results[0] if prefetch_results else 0
 
             if not results:
                 return {
@@ -108,7 +119,8 @@ class PhaseBalancingUseCase:
                 "start_node_id": start_node_id,
                 "node_count": len(nodes_to_query),
                 "downstream_node_ids": nodes_to_query,
-                "downstream_edge_ids": downstream_edges
+                "downstream_edge_ids": downstream_edges,
+                "estimated_rows": estimated_rows
             }
         except Exception as e:
              return {"error": str(e)}

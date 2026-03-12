@@ -9,6 +9,7 @@ interface Props {
     dateRange: { start: string, end: string };
     setDateRange: (range: { start: string, end: string }) => void;
     loading: boolean;
+    estimatedRows?: number;
     onRunVoltageMap: (agg: string) => void;
 }
 
@@ -16,6 +17,7 @@ export const AnalyticsPanel = memo(function AnalyticsPanel({
     dateRange,
     setDateRange,
     loading,
+    estimatedRows,
     onRunVoltageMap
 }: Props) {
     const [agg, setAgg] = useState<string>('median');
@@ -61,7 +63,7 @@ export const AnalyticsPanel = memo(function AnalyticsPanel({
                 />
 
                 <Button fullWidth mt="sm" leftSection={<MapIcon size={16} />} onClick={() => onRunVoltageMap(agg)} loading={loading}>
-                    Render Voltage Map
+                    {loading && estimatedRows ? `Querying ~${estimatedRows.toLocaleString()} rows...` : 'Render Voltage Map'}
                 </Button>
 
             </Stack>

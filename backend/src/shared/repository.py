@@ -3,6 +3,7 @@ from abc import ABC, abstractmethod
 from typing import List, Optional, Any
 from src.grid.asset import Asset
 from src.grid.meter import Meter
+from src.grid.alarm import Alarm
 
 class AssetRepository(ABC):
     """Abstract interface for asset storage."""
@@ -18,4 +19,14 @@ class AssetRepository(ABC):
     @abstractmethod
     def get_all_edges(self) -> List[Any]:
         """Returns all edges for graph construction."""
+        pass
+
+    @abstractmethod
+    def get_active_alarms(self, node_id: Optional[str] = None) -> List[Alarm]:
+        """Returns active alarms, optionally filtered by node_id."""
+        pass
+
+    @abstractmethod
+    def save_alarm(self, alarm: Alarm) -> None:
+        """Saves or updates an alarm."""
         pass

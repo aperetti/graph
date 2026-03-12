@@ -1,8 +1,9 @@
 import { useState, useMemo, useEffect } from 'react';
 import { Paper, Group, Title, ActionIcon, Box, Text, Stack, Select, Slider, SimpleGrid, Collapse, Button } from '@mantine/core';
-import { X, Filter, ChevronDown, ChevronUp } from 'lucide-react';
+import { X, Filter, ChevronDown, ChevronUp, Maximize2 } from 'lucide-react';
 import ReactECharts from 'echarts-for-react';
-
+import { Rnd } from 'react-rnd';
+import { ScadaLoadingAnimation } from '../../../components/ScadaLoadingAnimation';
 interface ReadingData {
     timestamp: string;
     kwh_delivered: number | null;
@@ -14,6 +15,7 @@ interface Props {
     onClose: () => void;
     loading: boolean;
     data: ReadingData[];
+    estimatedRows?: number;
     nodeName: string | undefined;
 }
 
@@ -42,6 +44,7 @@ export function ConsumptionTimeSeriesModal({
     onClose,
     loading,
     data,
+    estimatedRows,
     nodeName,
 }: Props) {
     const [startHour, setStartHour] = useState<string>('0');
@@ -51,6 +54,29 @@ export function ConsumptionTimeSeriesModal({
     const [winterTarget, setWinterTarget] = useState<number>(-5);
     const [summerTarget, setSummerTarget] = useState<number>(30);
     const [showFilters, setShowFilters] = useState<boolean>(false);
+
+    const [rndState, setRndState] = useState(() => {
+        const saved = localStorage.getItem('consumptionWindowPos');
+        if (saved) {
+            try {
+                return JSON.parse(saved);
+            } catch (e) {
+                console.error('Failed to parse saved consumptionWindowPos', e);
+            }
+        }
+        return {
+            x: window.innerWidth - 650,
+            y: 50,
+            width: 600,
+            height: 800
+        };
+    });
+
+    const handleRndChange = (d: any) => {
+        const newState = { ...rndState, ...d };
+        setRndState(newState);
+        localStorage.setItem('consumptionWindowPos', JSON.stringify(newState));
+    };
 
     useEffect(() => {
         if (isOpen && data && data.length > 0) {
@@ -272,402 +298,417 @@ export function ConsumptionTimeSeriesModal({
     if (!isOpen) return null;
 
     return (
-        <Paper
-            withBorder
-            style={{
-                position: 'fixed',
-                bottom: 0,
-                left: 0,
-                right: 0,
-                height: '45vh',
-                minHeight: 400,
-                zIndex: 1000,
-                background: 'rgba(26, 27, 30, 0.95)',
-                backdropFilter: 'blur(10px)',
-                display: 'flex',
-                flexDirection: 'column'
+        <Rnd
+            size={{ width: rndState.width, height: rndState.height }}
+            position={{ x: rndState.x, y: rndState.y }}
+            onDragStop={(_e, d) => handleRndChange({ x: d.x, y: d.y })}
+            onResizeStop={(_e, _direction, ref, _delta, position) => {
+                handleRndChange({
+                    width: ref.style.width,
+                    height: ref.style.height,
+                    ...position
+                });
             }}
+            minWidth={400}
+            minHeight={400}
+            bounds="window"
+            dragHandleClassName="handle"
+            style={{ zIndex: 1000 }}
         >
-            <Box px="md" py="xs" style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-                <Group justify="space-between" align="center" wrap="nowrap">
-                    <Title order={5} style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Grid Analytics: {nodeName}</Title>
-                    <Group wrap="nowrap" gap="xs">
-                        <Button
-                            variant="subtle"
-                            size="xs"
-                            color="gray"
-                            leftSection={<Filter size={14} />}
-                            rightSection={showFilters ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                            onClick={() => setShowFilters(!showFilters)}
-                        >
-                            Filters
-                        </Button>
-                        <ActionIcon variant="subtle" onClick={onClose}>
-                            <X size={16} />
-                        </ActionIcon>
-                    </Group>
-                </Group>
-
-                <Collapse in={showFilters}>
-                    <Box mt="md" mb="xs">
-                        <Group gap="xl" wrap="wrap">
-                            <Group gap="xs" wrap="wrap">
-                                <Text size="xs" c="dimmed">Month Range:</Text>
-                                <Select
-                                    id="select-month-start"
-                                    data={MONTH_OPTIONS}
-                                    value={startMonth}
-                                    onChange={(v) => v && setStartMonth(v)}
-                                    size="xs"
-                                    w={80}
-                                    comboboxProps={{ withinPortal: true, zIndex: 2000 }}
-                                />
-                                <Text size="xs" c="dimmed">to</Text>
-                                <Select
-                                    id="select-month-end"
-                                    data={MONTH_OPTIONS}
-                                    value={endMonth}
-                                    onChange={(v) => v && setEndMonth(v)}
-                                    size="xs"
-                                    w={80}
-                                    comboboxProps={{ withinPortal: true, zIndex: 2000 }}
-                                />
-                            </Group>
-
-                            <Group gap="xs" wrap="wrap">
-                                <Text size="xs" c="dimmed">Time Range (Slicer):</Text>
-                                <Select
-                                    id="select-hour-start"
-                                    data={HOUR_OPTIONS}
-                                    value={startHour}
-                                    onChange={(v) => v && setStartHour(v)}
-                                    size="xs"
-                                    w={90}
-                                    comboboxProps={{ withinPortal: true, zIndex: 2000 }}
-                                />
-                                <Text size="xs" c="dimmed">to</Text>
-                                <Select
-                                    id="select-hour-end"
-                                    data={HOUR_OPTIONS}
-                                    value={endHour}
-                                    onChange={(v) => v && setEndHour(v)}
-                                    size="xs"
-                                    w={90}
-                                    comboboxProps={{ withinPortal: true, zIndex: 2000 }}
-                                />
-                            </Group>
-                            <Text size="xs" c="dimmed" style={{ fontStyle: 'italic' }}>*Month slicer affects Daily Profile; Hour slicer affects Correlation</Text>
+            <Paper
+                withBorder
+                style={{
+                    width: '100%',
+                    height: '100%',
+                    background: 'rgba(26, 27, 30, 0.95)',
+                    backdropFilter: 'blur(10px)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    overflow: 'hidden'
+                }}
+            >
+                <Box px="md" py="xs" className="handle" style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', cursor: 'grab' }}>
+                    <Group justify="space-between" align="center" wrap="nowrap">
+                        <Group gap="xs" wrap="nowrap">
+                            <Maximize2 size={14} style={{ opacity: 0.5 }} />
+                            <Title order={5} style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Grid Analytics: {nodeName}</Title>
                         </Group>
-                    </Box>
-                </Collapse>
-            </Box>
+                        <Group wrap="nowrap" gap="xs">
+                            <Button
+                                variant="subtle"
+                                size="xs"
+                                color="gray"
+                                leftSection={<Filter size={14} />}
+                                rightSection={showFilters ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                                onClick={() => setShowFilters(!showFilters)}
+                            >
+                                Filters
+                            </Button>
+                            <ActionIcon variant="subtle" onClick={onClose}>
+                                <X size={16} />
+                            </ActionIcon>
+                        </Group>
+                    </Group>
 
-            <Box style={{ flex: 1, position: 'relative', width: '100%', overflow: 'hidden', padding: '10px' }}>
-                {loading ? (
-                    <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-                        <Text c="dimmed">Loading analytical data...</Text>
-                    </Box>
-                ) : data.length === 0 ? (
-                    <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-                        <Text c="dimmed">No readings found for this node in the selected date range.</Text>
-                    </Box>
-                ) : (
-                    <Box style={{ height: '100%', overflowY: 'auto', paddingRight: '10px' }}>
-                        <Stack gap="xl">
-                            <Box style={{ height: 280 }}>
-                                <Text size="xs" fw={700} c="dimmed" mb={4} ta="center">Consumption Time-Series (Full Period)</Text>
-                                <ReactECharts
-                                    style={{ height: 240, width: '100%' }}
-                                    option={{
-                                        tooltip: {
-                                            trigger: 'axis',
-                                            backgroundColor: 'rgba(26, 27, 30, 0.9)',
-                                            borderColor: '#373A40',
-                                            textStyle: { color: '#C1C2C5', fontSize: 11 }
-                                        },
-                                        useUTC: true,
-                                        legend: {
-                                            data: ['kWh Delivered', 'Temp (24h Avg)'],
-                                            textStyle: { color: '#A6A7AB', fontSize: 10 },
-                                            top: 0
-                                        },
-                                        grid: { left: 40, right: 40, bottom: 35, top: 45, containLabel: true },
-                                        dataZoom: [
-                                            { type: 'inside', start: 0, end: 100 },
-                                            { type: 'slider', start: 0, end: 100, height: 15, bottom: 10, textStyle: { color: '#A6A7AB' }, borderColor: '#373A40', fillerColor: 'rgba(51, 154, 240, 0.2)' }
-                                        ],
-                                        xAxis: {
-                                            type: 'time',
-                                            axisLabel: {
-                                                color: '#A6A7AB',
-                                                fontSize: 10,
-                                                formatter: (value: number) => {
-                                                    const date = new Date(value);
-                                                    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-                                                }
-                                            },
-                                            axisLine: { lineStyle: { color: '#373A40' } },
-                                            splitLine: { show: false }
-                                        },
-                                        yAxis: [
-                                            {
-                                                type: 'value',
-                                                name: 'kWh',
-                                                scale: true,
-                                                axisLabel: { color: '#A6A7AB', fontSize: 10 },
-                                                splitLine: { lineStyle: { color: '#25262B' } }
-                                            },
-                                            {
-                                                type: 'value',
-                                                name: '°C',
-                                                scale: true,
-                                                axisLabel: { color: '#FA5252', fontSize: 10 },
-                                                splitLine: { show: false }
-                                            }
-                                        ],
-                                        series: [
-                                            {
-                                                name: 'kWh Delivered',
-                                                type: 'line',
-                                                data: timeSeriesData.map(d => [d[0], d[1]]),
-                                                smooth: true,
-                                                showSymbol: false,
-                                                itemStyle: { color: '#339af0' },
-                                                areaStyle: {
-                                                    opacity: 0.1,
-                                                    color: {
-                                                        type: 'linear',
-                                                        x: 0, y: 0, x2: 0, y2: 1,
-                                                        colorStops: [{ offset: 0, color: '#339af0' }, { offset: 1, color: 'rgba(51, 154, 240, 0)' }]
-                                                    }
-                                                },
-                                                markLine: {
-                                                    symbol: ['none', 'none'],
-                                                    silent: true,
-                                                    data: markLines
-                                                }
-                                            },
-                                            {
-                                                name: 'Temp (24h Avg)',
-                                                type: 'line',
-                                                yAxisIndex: 1,
-                                                data: timeSeriesData.map(d => [d[0], d[2]]),
-                                                smooth: true,
-                                                showSymbol: false,
-                                                itemStyle: { color: '#fa5252' },
-                                                lineStyle: { width: 1, opacity: 0.5 }
-                                            }
-                                        ]
-                                    }}
-                                />
-                            </Box>
+                    <Collapse in={showFilters}>
+                        <Box mt="md" mb="xs">
+                            <Group gap="xl" wrap="wrap">
+                                <Group gap="xs" wrap="wrap">
+                                    <Text size="xs" c="dimmed">Month Range:</Text>
+                                    <Select
+                                        id="select-month-start"
+                                        data={MONTH_OPTIONS}
+                                        value={startMonth}
+                                        onChange={(v) => v && setStartMonth(v)}
+                                        size="xs"
+                                        w={80}
+                                        comboboxProps={{ withinPortal: true, zIndex: 2000 }}
+                                    />
+                                    <Text size="xs" c="dimmed">to</Text>
+                                    <Select
+                                        id="select-month-end"
+                                        data={MONTH_OPTIONS}
+                                        value={endMonth}
+                                        onChange={(v) => v && setEndMonth(v)}
+                                        size="xs"
+                                        w={80}
+                                        comboboxProps={{ withinPortal: true, zIndex: 2000 }}
+                                    />
+                                </Group>
 
-                            <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg" mb="xl">
-                                <Box style={{ height: 380 }}>
-                                    <Text size="xs" fw={700} c="dimmed" mb={4} ta="center">Typical Daily Load Profile (Hourly Avg)</Text>
+                                <Group gap="xs" wrap="wrap">
+                                    <Text size="xs" c="dimmed">Time Range (Slicer):</Text>
+                                    <Select
+                                        id="select-hour-start"
+                                        data={HOUR_OPTIONS}
+                                        value={startHour}
+                                        onChange={(v) => v && setStartHour(v)}
+                                        size="xs"
+                                        w={90}
+                                        comboboxProps={{ withinPortal: true, zIndex: 2000 }}
+                                    />
+                                    <Text size="xs" c="dimmed">to</Text>
+                                    <Select
+                                        id="select-hour-end"
+                                        data={HOUR_OPTIONS}
+                                        value={endHour}
+                                        onChange={(v) => v && setEndHour(v)}
+                                        size="xs"
+                                        w={90}
+                                        comboboxProps={{ withinPortal: true, zIndex: 2000 }}
+                                    />
+                                </Group>
+                                <Text size="xs" c="dimmed" style={{ fontStyle: 'italic' }}>*Month slicer affects Daily Profile; Hour slicer affects Correlation</Text>
+                            </Group>
+                        </Box>
+                    </Collapse>
+                </Box>
+
+                <Box style={{ flex: 1, position: 'relative', width: '100%', overflow: 'hidden', padding: '10px' }}>
+                    {loading ? (
+                        <ScadaLoadingAnimation estimatedRows={estimatedRows} />
+                    ) : data.length === 0 ? (
+                        <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+                            <Text c="dimmed">No readings found for this node in the selected date range.</Text>
+                        </Box>
+                    ) : (
+                        <Box style={{ height: '100%', overflowY: 'auto', paddingRight: '10px' }}>
+                            <Stack gap="xl">
+                                <Box style={{ height: 280 }}>
+                                    <Text size="xs" fw={700} c="dimmed" mb={4} ta="center">Consumption Time-Series (Full Period)</Text>
                                     <ReactECharts
-                                        style={{ height: 340, width: '100%' }}
+                                        style={{ height: 240, width: '100%' }}
                                         option={{
                                             tooltip: {
                                                 trigger: 'axis',
                                                 backgroundColor: 'rgba(26, 27, 30, 0.9)',
                                                 borderColor: '#373A40',
-                                                textStyle: { color: '#C1C2C5' }
+                                                textStyle: { color: '#C1C2C5', fontSize: 11 }
                                             },
-                                            grid: { left: 50, right: 30, bottom: 25, top: 40, containLabel: true },
+                                            useUTC: true,
+                                            legend: {
+                                                data: ['kWh Delivered', 'Temp (24h Avg)'],
+                                                textStyle: { color: '#A6A7AB', fontSize: 10 },
+                                                top: 0
+                                            },
+                                            grid: { left: 40, right: 40, bottom: 35, top: 45, containLabel: true },
+                                            dataZoom: [
+                                                { type: 'inside', start: 0, end: 100 },
+                                                { type: 'slider', start: 0, end: 100, height: 15, bottom: 10, textStyle: { color: '#A6A7AB' }, borderColor: '#373A40', fillerColor: 'rgba(51, 154, 240, 0.2)' }
+                                            ],
                                             xAxis: {
-                                                type: 'category',
-                                                data: Array.from({ length: 24 }, (_, i) => `${i}:00`),
-                                                axisLabel: { color: '#A6A7AB', fontSize: 10 },
-                                                axisLine: { lineStyle: { color: '#373A40' } }
-                                            },
-                                            yAxis: {
-                                                type: 'value',
-                                                name: 'Avg kWh',
-                                                scale: true,
-                                                axisLabel: { color: '#A6A7AB', fontSize: 10 },
-                                                splitLine: { lineStyle: { color: '#25262B' } }
-                                            },
-                                            series: [{
-                                                name: 'Average Load',
-                                                type: 'line',
-                                                data: hourlyAggregation.map(h => h.avg),
-                                                itemStyle: { color: '#ffd43b' },
-                                                areaStyle: {
-                                                    opacity: 0.2,
-                                                    color: {
-                                                        type: 'linear',
-                                                        x: 0, y: 0, x2: 0, y2: 1,
-                                                        colorStops: [{ offset: 0, color: 'rgba(255, 212, 59, 0.3)' }, { offset: 1, color: 'rgba(255, 212, 59, 0)' }]
+                                                type: 'time',
+                                                axisLabel: {
+                                                    color: '#A6A7AB',
+                                                    fontSize: 10,
+                                                    formatter: (value: number) => {
+                                                        const date = new Date(value);
+                                                        return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
                                                     }
                                                 },
-                                                smooth: true,
-                                                showSymbol: false
-                                            }]
+                                                axisLine: { lineStyle: { color: '#373A40' } },
+                                                splitLine: { show: false }
+                                            },
+                                            yAxis: [
+                                                {
+                                                    type: 'value',
+                                                    name: 'kWh',
+                                                    scale: true,
+                                                    axisLabel: { color: '#A6A7AB', fontSize: 10 },
+                                                    splitLine: { lineStyle: { color: '#25262B' } }
+                                                },
+                                                {
+                                                    type: 'value',
+                                                    name: '°C',
+                                                    scale: true,
+                                                    axisLabel: { color: '#FA5252', fontSize: 10 },
+                                                    splitLine: { show: false }
+                                                }
+                                            ],
+                                            series: [
+                                                {
+                                                    name: 'kWh Delivered',
+                                                    type: 'line',
+                                                    data: timeSeriesData.map(d => [d[0], d[1]]),
+                                                    smooth: true,
+                                                    showSymbol: false,
+                                                    itemStyle: { color: '#339af0' },
+                                                    areaStyle: {
+                                                        opacity: 0.1,
+                                                        color: {
+                                                            type: 'linear',
+                                                            x: 0, y: 0, x2: 0, y2: 1,
+                                                            colorStops: [{ offset: 0, color: '#339af0' }, { offset: 1, color: 'rgba(51, 154, 240, 0)' }]
+                                                        }
+                                                    },
+                                                    markLine: {
+                                                        symbol: ['none', 'none'],
+                                                        silent: true,
+                                                        data: markLines
+                                                    }
+                                                },
+                                                {
+                                                    name: 'Temp (24h Avg)',
+                                                    type: 'line',
+                                                    yAxisIndex: 1,
+                                                    data: timeSeriesData.map(d => [d[0], d[2]]),
+                                                    smooth: true,
+                                                    showSymbol: false,
+                                                    itemStyle: { color: '#fa5252' },
+                                                    lineStyle: { width: 1, opacity: 0.5 }
+                                                }
+                                            ]
                                         }}
                                     />
                                 </Box>
 
-                                <Box style={{ height: 420 }}>
-                                    <Text size="xs" fw={700} c="dimmed" mb={12} ta="center">Load vs Temperature Correlation (Filtered)</Text>
-                                    <SimpleGrid cols={2} mb="xl" px="xs">
-                                        <Box px="md">
-                                            <Text size="xs" fw={500} c="blue" mb={6}>Winter Target: {winterTarget}°C</Text>
-                                            <Slider
-                                                value={winterTarget}
-                                                onChange={setWinterTarget}
-                                                min={-15}
-                                                max={40}
-                                                step={0.5}
-                                                marks={[
-                                                    { value: -10, label: '-10' },
-                                                    { value: 0, label: '0' },
-                                                    { value: 10, label: '10' },
-                                                    { value: 20, label: '20' },
-                                                    { value: 30, label: '30' },
-                                                    { value: 40, label: '40' }
-                                                ]}
-                                                color="blue"
-                                                styles={{ markLabel: { fontSize: 9, color: '#A6A7AB', marginTop: 5 } }}
-                                            />
-                                        </Box>
-                                        <Box px="md">
-                                            <Text size="xs" fw={500} c="red" mb={6}>Summer Target: {summerTarget}°C</Text>
-                                            <Slider
-                                                value={summerTarget}
-                                                onChange={setSummerTarget}
-                                                min={-15}
-                                                max={40}
-                                                step={0.5}
-                                                marks={[
-                                                    { value: -10, label: '-10' },
-                                                    { value: 0, label: '0' },
-                                                    { value: 10, label: '10' },
-                                                    { value: 20, label: '20' },
-                                                    { value: 30, label: '30' },
-                                                    { value: 40, label: '40' }
-                                                ]}
-                                                color="red"
-                                                styles={{ markLabel: { fontSize: 9, color: '#A6A7AB', marginTop: 5 } }}
-                                            />
-                                        </Box>
-                                    </SimpleGrid>
-                                    <ReactECharts
-                                        style={{ height: 260, width: '100%' }}
-                                        option={{
-                                            tooltip: { trigger: 'item', axisPointer: { type: 'cross' } },
-                                            grid: { left: 40, right: 20, bottom: 25, top: 10, containLabel: true },
-                                            xAxis: {
-                                                type: 'value',
-                                                nameTextStyle: { color: '#A6A7AB' },
-                                                axisLabel: { color: '#A6A7AB', fontSize: 10 },
-                                                splitLine: { show: true, lineStyle: { color: '#25262B' } }
-                                            },
-                                            yAxis: {
-                                                type: 'value',
-                                                scale: true,
-                                                axisLabel: { color: '#A6A7AB', fontSize: 10 },
-                                                splitLine: { lineStyle: { color: '#25262B' } }
-                                            },
-                                            series: [
-                                                {
-                                                    name: 'Summer Points',
-                                                    type: 'scatter',
-                                                    data: seasonalData.summerRaw.map(d => [d.x, d.y]),
-                                                    itemStyle: { color: '#fa5252', opacity: 0.5 },
-                                                    symbolSize: 6,
+                                <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg" mb="xl">
+                                    <Box style={{ height: 380 }}>
+                                        <Text size="xs" fw={700} c="dimmed" mb={4} ta="center">Typical Daily Load Profile (Hourly Avg)</Text>
+                                        <ReactECharts
+                                            style={{ height: 340, width: '100%' }}
+                                            option={{
+                                                tooltip: {
+                                                    trigger: 'axis',
+                                                    backgroundColor: 'rgba(26, 27, 30, 0.9)',
+                                                    borderColor: '#373A40',
+                                                    textStyle: { color: '#C1C2C5' }
                                                 },
-                                                {
-                                                    name: 'Winter Points',
-                                                    type: 'scatter',
-                                                    data: seasonalData.winterRaw.map(d => [d.x, d.y]),
-                                                    itemStyle: { color: '#339af0', opacity: 0.5 },
-                                                    symbolSize: 6,
+                                                grid: { left: 50, right: 30, bottom: 25, top: 40, containLabel: true },
+                                                xAxis: {
+                                                    type: 'category',
+                                                    data: Array.from({ length: 24 }, (_, i) => `${i}:00`),
+                                                    axisLabel: { color: '#A6A7AB', fontSize: 10 },
+                                                    axisLine: { lineStyle: { color: '#373A40' } }
                                                 },
-                                                {
-                                                    name: 'Transition Points',
-                                                    type: 'scatter',
-                                                    data: seasonalData.neutralRaw.map(d => [d.x, d.y]),
-                                                    itemStyle: { color: '#868e96', opacity: 0.5 },
-                                                    symbolSize: 6,
+                                                yAxis: {
+                                                    type: 'value',
+                                                    name: 'Avg kWh',
+                                                    scale: true,
+                                                    axisLabel: { color: '#A6A7AB', fontSize: 10 },
+                                                    splitLine: { lineStyle: { color: '#25262B' } }
                                                 },
-                                                seasonalData.summer && {
-                                                    name: 'Summer Regression',
+                                                series: [{
+                                                    name: 'Average Load',
                                                     type: 'line',
-                                                    data: [seasonalData.summer.start, seasonalData.summer.end],
-                                                    itemStyle: { color: '#e03131' },
-                                                    showSymbol: false,
-                                                    lineStyle: { width: 2, type: 'dashed' },
-                                                    smooth: false
-                                                },
-                                                seasonalData.winter && {
-                                                    name: 'Winter Regression',
-                                                    type: 'line',
-                                                    data: [seasonalData.winter.start, seasonalData.winter.end],
-                                                    itemStyle: { color: '#1c7ed6' },
-                                                    showSymbol: false,
-                                                    lineStyle: { width: 2, type: 'dashed' },
-                                                    smooth: false
-                                                },
-                                                seasonalData.summer && {
-                                                    name: 'Summer Target',
-                                                    type: 'scatter',
-                                                    data: [[summerTarget, seasonalData.summer.slope * summerTarget + seasonalData.summer.intercept]],
-                                                    itemStyle: {
-                                                        color: '#e03131',
-                                                        borderColor: '#fff',
-                                                        borderWidth: 1,
-                                                        shadowBlur: 5,
-                                                        shadowColor: 'rgba(224, 49, 49, 0.8)'
+                                                    data: hourlyAggregation.map(h => h.avg),
+                                                    itemStyle: { color: '#ffd43b' },
+                                                    areaStyle: {
+                                                        opacity: 0.2,
+                                                        color: {
+                                                            type: 'linear',
+                                                            x: 0, y: 0, x2: 0, y2: 1,
+                                                            colorStops: [{ offset: 0, color: 'rgba(255, 212, 59, 0.3)' }, { offset: 1, color: 'rgba(255, 212, 59, 0)' }]
+                                                        }
                                                     },
-                                                    symbolSize: 12,
-                                                    symbol: 'diamond',
-                                                    label: {
-                                                        show: true,
-                                                        formatter: (params: any) => `Summer: ${params.value[1].toFixed(2)} kWh`,
-                                                        position: 'top',
-                                                        color: '#fff',
-                                                        fontSize: 10,
-                                                        fontWeight: 'bold',
-                                                        backgroundColor: 'rgba(0,0,0,0.6)',
-                                                        padding: [2, 4],
-                                                        borderRadius: 2
-                                                    }
+                                                    smooth: true,
+                                                    showSymbol: false
+                                                }]
+                                            }}
+                                        />
+                                    </Box>
+
+                                    <Box style={{ height: 420 }}>
+                                        <Text size="xs" fw={700} c="dimmed" mb={12} ta="center">Load vs Temperature Correlation (Filtered)</Text>
+                                        <SimpleGrid cols={2} mb="xl" px="xs">
+                                            <Box px="md">
+                                                <Text size="xs" fw={500} c="blue" mb={6}>Winter Target: {winterTarget}°C</Text>
+                                                <Slider
+                                                    value={winterTarget}
+                                                    onChange={setWinterTarget}
+                                                    min={-15}
+                                                    max={40}
+                                                    step={0.5}
+                                                    marks={[
+                                                        { value: -10, label: '-10' },
+                                                        { value: 0, label: '0' },
+                                                        { value: 10, label: '10' },
+                                                        { value: 20, label: '20' },
+                                                        { value: 30, label: '30' },
+                                                        { value: 40, label: '40' }
+                                                    ]}
+                                                    color="blue"
+                                                    styles={{ markLabel: { fontSize: 9, color: '#A6A7AB', marginTop: 5 } }}
+                                                />
+                                            </Box>
+                                            <Box px="md">
+                                                <Text size="xs" fw={500} c="red" mb={6}>Summer Target: {summerTarget}°C</Text>
+                                                <Slider
+                                                    value={summerTarget}
+                                                    onChange={setSummerTarget}
+                                                    min={-15}
+                                                    max={40}
+                                                    step={0.5}
+                                                    marks={[
+                                                        { value: -10, label: '-10' },
+                                                        { value: 0, label: '0' },
+                                                        { value: 10, label: '10' },
+                                                        { value: 20, label: '20' },
+                                                        { value: 30, label: '30' },
+                                                        { value: 40, label: '40' }
+                                                    ]}
+                                                    color="red"
+                                                    styles={{ markLabel: { fontSize: 9, color: '#A6A7AB', marginTop: 5 } }}
+                                                />
+                                            </Box>
+                                        </SimpleGrid>
+                                        <ReactECharts
+                                            style={{ height: 260, width: '100%' }}
+                                            option={{
+                                                tooltip: { trigger: 'item', axisPointer: { type: 'cross' } },
+                                                grid: { left: 40, right: 20, bottom: 25, top: 10, containLabel: true },
+                                                xAxis: {
+                                                    type: 'value',
+                                                    nameTextStyle: { color: '#A6A7AB' },
+                                                    axisLabel: { color: '#A6A7AB', fontSize: 10 },
+                                                    splitLine: { show: true, lineStyle: { color: '#25262B' } }
                                                 },
-                                                seasonalData.winter && {
-                                                    name: 'Winter Target',
-                                                    type: 'scatter',
-                                                    data: [[winterTarget, seasonalData.winter.slope * winterTarget + seasonalData.winter.intercept]],
-                                                    itemStyle: {
-                                                        color: '#1c7ed6',
-                                                        borderColor: '#fff',
-                                                        borderWidth: 1,
-                                                        shadowBlur: 5,
-                                                        shadowColor: 'rgba(28, 126, 214, 0.8)'
+                                                yAxis: {
+                                                    type: 'value',
+                                                    scale: true,
+                                                    axisLabel: { color: '#A6A7AB', fontSize: 10 },
+                                                    splitLine: { lineStyle: { color: '#25262B' } }
+                                                },
+                                                series: [
+                                                    {
+                                                        name: 'Summer Points',
+                                                        type: 'scatter',
+                                                        data: seasonalData.summerRaw.map(d => [d.x, d.y]),
+                                                        itemStyle: { color: '#fa5252', opacity: 0.5 },
+                                                        symbolSize: 6,
                                                     },
-                                                    symbolSize: 12,
-                                                    symbol: 'diamond',
-                                                    label: {
-                                                        show: true,
-                                                        formatter: (params: any) => `Winter: ${params.value[1].toFixed(2)} kWh`,
-                                                        position: 'bottom',
-                                                        color: '#fff',
-                                                        fontSize: 10,
-                                                        fontWeight: 'bold',
-                                                        backgroundColor: 'rgba(0,0,0,0.6)',
-                                                        padding: [2, 4],
-                                                        borderRadius: 2
+                                                    {
+                                                        name: 'Winter Points',
+                                                        type: 'scatter',
+                                                        data: seasonalData.winterRaw.map(d => [d.x, d.y]),
+                                                        itemStyle: { color: '#339af0', opacity: 0.5 },
+                                                        symbolSize: 6,
+                                                    },
+                                                    {
+                                                        name: 'Transition Points',
+                                                        type: 'scatter',
+                                                        data: seasonalData.neutralRaw.map(d => [d.x, d.y]),
+                                                        itemStyle: { color: '#868e96', opacity: 0.5 },
+                                                        symbolSize: 6,
+                                                    },
+                                                    seasonalData.summer && {
+                                                        name: 'Summer Regression',
+                                                        type: 'line',
+                                                        data: [seasonalData.summer.start, seasonalData.summer.end],
+                                                        itemStyle: { color: '#e03131' },
+                                                        showSymbol: false,
+                                                        lineStyle: { width: 2, type: 'dashed' },
+                                                        smooth: false
+                                                    },
+                                                    seasonalData.winter && {
+                                                        name: 'Winter Regression',
+                                                        type: 'line',
+                                                        data: [seasonalData.winter.start, seasonalData.winter.end],
+                                                        itemStyle: { color: '#1c7ed6' },
+                                                        showSymbol: false,
+                                                        lineStyle: { width: 2, type: 'dashed' },
+                                                        smooth: false
+                                                    },
+                                                    seasonalData.summer && {
+                                                        name: 'Summer Target',
+                                                        type: 'scatter',
+                                                        data: [[summerTarget, seasonalData.summer.slope * summerTarget + seasonalData.summer.intercept]],
+                                                        itemStyle: {
+                                                            color: '#e03131',
+                                                            borderColor: '#fff',
+                                                            borderWidth: 1,
+                                                            shadowBlur: 5,
+                                                            shadowColor: 'rgba(224, 49, 49, 0.8)'
+                                                        },
+                                                        symbolSize: 12,
+                                                        symbol: 'diamond',
+                                                        label: {
+                                                            show: true,
+                                                            formatter: (params: any) => `Summer: ${params.value[1].toFixed(2)} kWh`,
+                                                            position: 'top',
+                                                            color: '#fff',
+                                                            fontSize: 10,
+                                                            fontWeight: 'bold',
+                                                            backgroundColor: 'rgba(0,0,0,0.6)',
+                                                            padding: [2, 4],
+                                                            borderRadius: 2
+                                                        }
+                                                    },
+                                                    seasonalData.winter && {
+                                                        name: 'Winter Target',
+                                                        type: 'scatter',
+                                                        data: [[winterTarget, seasonalData.winter.slope * winterTarget + seasonalData.winter.intercept]],
+                                                        itemStyle: {
+                                                            color: '#1c7ed6',
+                                                            borderColor: '#fff',
+                                                            borderWidth: 1,
+                                                            shadowBlur: 5,
+                                                            shadowColor: 'rgba(28, 126, 214, 0.8)'
+                                                        },
+                                                        symbolSize: 12,
+                                                        symbol: 'diamond',
+                                                        label: {
+                                                            show: true,
+                                                            formatter: (params: any) => `Winter: ${params.value[1].toFixed(2)} kWh`,
+                                                            position: 'bottom',
+                                                            color: '#fff',
+                                                            fontSize: 10,
+                                                            fontWeight: 'bold',
+                                                            backgroundColor: 'rgba(0,0,0,0.6)',
+                                                            padding: [2, 4],
+                                                            borderRadius: 2
+                                                        }
                                                     }
-                                                }
-                                            ].filter(Boolean)
-                                        }}
-                                    />
-                                </Box>
-                            </SimpleGrid>
-                        </Stack>
-                    </Box>
-                )}
-            </Box>
-        </Paper>
+                                                ].filter(Boolean)
+                                            }}
+                                        />
+                                    </Box>
+                                </SimpleGrid>
+                            </Stack>
+                        </Box>
+                    )}
+                </Box>
+            </Paper>
+        </Rnd >
     );
 }

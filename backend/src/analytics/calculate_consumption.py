@@ -8,27 +8,59 @@ class CalculateAggregateConsumptionUseCase:
     
     def __init__(self, graph_engine: GraphEngine, db_path: str, parquet_dir: str = 'readings'):
         self.graph_engine = graph_engine
+        # Handle case where db_path might be same as parquet_dir (for tests)
         self.db_path = db_path
-        self.parquet_dir = parquet_dir
+        self.parquet_dir = parquet_dir if parquet_dir else db_path
         
-    def execute(self, start_node_id: str, start_time: str, end_time: str) -> Dict[str, Any]:
+    def estimate(self, start_node_ids: List[str], start_time: str, end_time: str) -> Dict[str, Any]:
+        """Returns the estimated number of rows to be processed for multiple nodes."""
+        all_downstream_nodes = set()
+        for node_id in start_node_ids:
+            nodes, _ = self.graph_engine.find_downstream(node_id)
+            if nodes:
+                all_downstream_nodes.update(nodes)
+            else:
+                all_downstream_nodes.add(node_id)
+        
+        nodes_to_query = list(all_downstream_nodes)
+        nodes_list = "'" + "','".join(nodes_to_query) + "'"
+        
+        prefetch_query = f"""
+            SELECT COUNT(*) as estimated_rows
+            FROM read_parquet('{self.parquet_dir}/*.parquet') r
+            WHERE r.node_id IN ({nodes_list})
+              AND r.timestamp >= '{start_time}' 
+              AND r.timestamp <= '{end_time}'
         """
-        Aggregates consumption data grouped by timestamp.
         
-        Args:
-            start_node_id: The asset to evaluate.
-            start_time: ISO timestamp string.
-            end_time: ISO timestamp string.
+        try:
+            with duckdb.connect(self.db_path, read_only=True) as conn:
+                prefetch_results = conn.execute(prefetch_query).fetchone()
             
-        Returns:
-            Dictionary with time-series consumption data.
+            return {
+                "estimated_rows": prefetch_results[0] if prefetch_results else 0,
+                "node_count": len(nodes_to_query)
+            }
+        except Exception as e:
+            return {"error": str(e)}
+
+    def execute(self, start_node_ids: List[str], start_time: str, end_time: str) -> Dict[str, Any]:
         """
-        downstream_nodes, downstream_edges = self.graph_engine.find_downstream(start_node_id)
+        Aggregates consumption data grouped by timestamp for multiple start nodes.
+        """
+        all_downstream_nodes = set()
+        all_downstream_edges = set()
         
-        # If no downstream (leaf node like a Meter), query the node itself
-        nodes_to_query = downstream_nodes if downstream_nodes else [start_node_id]
+        for node_id in start_node_ids:
+            nodes, edges = self.graph_engine.find_downstream(node_id)
+            if nodes:
+                all_downstream_nodes.update(nodes)
+            else:
+                all_downstream_nodes.add(node_id)
+            if edges:
+                all_downstream_edges.update(edges)
         
-        # Format for SQL IN clause
+        nodes_to_query = list(all_downstream_nodes)
         nodes_list = "'" + "','".join(nodes_to_query) + "'"
         
         query = f"""
@@ -59,21 +91,21 @@ class CalculateAggregateConsumptionUseCase:
             time_series = [
                 {
                     "timestamp": row[0].isoformat() + "Z",
-                    "kwh_delivered": row[1],
-                    "total_current": row[2],
-                    "median_voltage_a": row[3],
-                    "median_voltage_b": row[4],
-                    "median_voltage_c": row[5],
-                    "temperature": row[6]
+                    "kwh_delivered": float(row[1]),
+                    "total_current": float(row[2]),
+                    "median_voltage_a": float(row[3]) if row[3] else 0,
+                    "median_voltage_b": float(row[4]) if row[4] else 0,
+                    "median_voltage_c": float(row[5]) if row[5] else 0,
+                    "temperature": float(row[6]) if row[6] else 0
                 }
                 for row in results
             ]
             
             return {
-                "start_node_id": start_node_id,
+                "start_node_ids": start_node_ids,
                 "node_count": len(nodes_to_query),
                 "downstream_node_ids": nodes_to_query,
-                "downstream_edge_ids": downstream_edges,
+                "downstream_edge_ids": list(all_downstream_edges),
                 "time_series": time_series
             }
         except Exception as e:

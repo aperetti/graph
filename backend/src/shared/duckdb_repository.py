@@ -3,6 +3,7 @@ import duckdb
 from typing import List, Optional, Any
 from src.shared.repository import AssetRepository
 from src.grid.asset import Asset, Edge
+from src.grid.alarm import Alarm
 from src.shared.database_setup import DB_PATH
 
 class DuckDBRepository(AssetRepository):
@@ -84,3 +85,42 @@ class DuckDBRepository(AssetRepository):
                 }
                 for row in results
             ]
+
+    def get_active_alarms(self, node_id: Optional[str] = None) -> List[Alarm]:
+        with duckdb.connect(self.db_path, read_only=True) as conn:
+            query = "SELECT alarm_id, node_id, timestamp, alarm_code, severity, message, is_active FROM alarms WHERE is_active = TRUE"
+            params = []
+            if node_id:
+                query += " AND node_id = ?"
+                params.append(node_id)
+            
+            results = conn.execute(query, params).fetchall()
+            return [
+                Alarm(
+                    alarm_id=row[0],
+                    node_id=row[1],
+                    timestamp=row[2],
+                    alarm_code=row[3],
+                    severity=row[4],
+                    message=row[5],
+                    is_active=row[6]
+                )
+                for row in results
+            ]
+
+    def save_alarm(self, alarm: Alarm) -> None:
+        with duckdb.connect(self.db_path) as conn:
+            conn.execute(
+                """
+                INSERT INTO alarms (alarm_id, node_id, timestamp, alarm_code, severity, message, is_active) 
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT (alarm_id) DO UPDATE SET 
+                    node_id = excluded.node_id,
+                    timestamp = excluded.timestamp,
+                    alarm_code = excluded.alarm_code,
+                    severity = excluded.severity,
+                    message = excluded.message,
+                    is_active = excluded.is_active
+                """,
+                (alarm.alarm_id, alarm.node_id, alarm.timestamp, alarm.alarm_code, alarm.severity, alarm.message, alarm.is_active)
+            )

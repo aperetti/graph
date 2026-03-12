@@ -39,3 +39,19 @@ def test_calculate_consumption_with_temperature(graph_engine):
         assert isinstance(first_point["temperature"], (int, float))
         assert "kwh_delivered" in first_point
         assert "median_voltage_a" in first_point
+def test_calculate_multi_node_consumption(graph_engine):
+    """Test that consumption calculation handles multiple start nodes."""
+    uc = CalculateAggregateConsumptionUseCase(graph_engine, PARQUET_DIR)
+    
+    # Query M-1 and M-2 (if exists)
+    node_ids = ["M-1", "M-2"]
+    result = uc.execute(node_ids, "2020-01-01T00:00:00", "2030-01-01T00:00:00")
+    
+    # We mainly want to check that it doesn't crash and returns the expected structure
+    assert "time_series" in result
+    assert "downstream_node_ids" in result
+    assert "downstream_edge_ids" in result
+    
+    # If M-1 exists, its downstream should be in the result
+    if result["downstream_node_ids"]:
+        assert len(result["downstream_node_ids"]) > 0

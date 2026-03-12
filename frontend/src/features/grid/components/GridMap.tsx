@@ -7,13 +7,14 @@ import type { Node, Edge } from '../../../shared/types';
 interface GridMapProps {
     nodes: Node[];
     edges: Edge[];
-    onNodeClick: (node: Node) => void;
+    onNodeClick: (node: Node, multiSelect: boolean) => void;
     onNodeRightClick?: (node: Node, x: number, y: number) => void;
     onEdgeRightClick?: (edge: Edge, x: number, y: number) => void;
     highlightedNodes?: Set<string>;
     highlightedEdges?: Set<string>;
-    selectedNodeId?: string | null;
+    selectedNodeIds?: string[];
     nodeAverages?: Record<string, number> | null;
+    onMapClick?: () => void;
     voltageScale?: {
         criticalHigh: number;
         highWarning: number;
@@ -69,10 +70,12 @@ export const GridMap = React.memo<GridMapProps>(({
     onEdgeRightClick,
     highlightedNodes = new Set(),
     highlightedEdges = new Set(),
-    selectedNodeId = null,
+    selectedNodeIds = [],
     nodeAverages = null,
+    onMapClick,
     voltageScale
 }) => {
+    const selectedNodeIdsSet = useMemo(() => new Set(selectedNodeIds), [selectedNodeIds]);
     const [mounted, setMounted] = useState(false);
     const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
 
@@ -121,6 +124,24 @@ export const GridMap = React.memo<GridMapProps>(({
     }, [nodes]);
 
     const layers = useMemo(() => [
+        new ScatterplotLayer({
+            id: 'selection-halo',
+            data: nodes.filter(n => selectedNodeIdsSet.has(n.id)),
+            getPosition: (d: Node) => d.position,
+            getFillColor: [255, 255, 255, 80], // Subtle soft white/gray halo
+            getRadius: (d: Node) => {
+                const baseRadius = d.type === 'Transformer' ? 6 : (d.type === 'Meter' || d.type === 'Bus' ? 5 : 10);
+                return baseRadius * 1.1; // Slightly bigger (1.1x)
+            },
+            radiusUnits: 'pixels',
+            radiusScale: Math.pow(1.5, (viewState.zoom || 14) - 14),
+            radiusMinPixels: 2,
+            pickable: false,
+            updateTriggers: {
+                getRadius: [selectedNodeIdsSet, viewState.zoom],
+                getFillColor: [selectedNodeIdsSet]
+            }
+        }),
         new PathLayer({
             id: 'grid-lines',
             data: edges,
@@ -181,7 +202,7 @@ export const GridMap = React.memo<GridMapProps>(({
             }),
             getPosition: (d: Node) => d.position,
             getFillColor: (d: Node) => {
-                if (selectedNodeId === d.id) return [255, 200, 50, 255];
+                if (selectedNodeIdsSet.has(d.id)) return [255, 200, 50, 255];
 
                 if (nodeAverages && nodeAverages[d.id] !== undefined && voltageScale) {
                     const voltage = nodeAverages[d.id];
@@ -204,17 +225,17 @@ export const GridMap = React.memo<GridMapProps>(({
             getRadius: (d: Node) => {
                 const isHovered = hoveredNodeId === d.id;
                 const isHighlighted = highlightedNodes.has(d.id);
-                const isSelected = selectedNodeId === d.id;
+                const isSelected = selectedNodeIdsSet.has(d.id);
                 // Transformer takes old Bus size (4). Bus takes Meter size (3).
                 const baseRadius = d.type === 'Transformer' ? 4 : (d.type === 'Meter' || d.type === 'Bus' ? 3 : 8);
                 let radius = isHovered ? baseRadius * 2.5 : baseRadius;
                 if (isHighlighted) radius = radius * 1.5;
-                if (isSelected) radius = radius * 2.5; // Make the specifically selected node even larger
+                if (isSelected) radius = radius * 1.1; // Make the specifically selected node slightly larger
                 return radius;
             },
             updateTriggers: {
-                getRadius: [hoveredNodeId, highlightedNodes, selectedNodeId],
-                getFillColor: [highlightedNodes, selectedNodeId, nodeAverages, voltageScale]
+                getRadius: [hoveredNodeId, highlightedNodes, selectedNodeIdsSet],
+                getFillColor: [highlightedNodes, selectedNodeIdsSet, nodeAverages, voltageScale]
             },
             radiusUnits: 'pixels',
             radiusScale: Math.pow(1.5, (viewState.zoom || 14) - 14),
@@ -225,8 +246,12 @@ export const GridMap = React.memo<GridMapProps>(({
             onHover: (info) => {
                 setHoveredNodeId(info.object ? info.object.id : null);
             },
-            onClick: (info) => {
-                if (info.object) onNodeClick(info.object);
+            onClick: (info, event) => {
+                const srcEvent = (event as any).srcEvent as MouseEvent;
+                console.log('[GridMap] Interaction:', info.object?.id, 'Shift:', srcEvent?.shiftKey);
+                if (info.object && srcEvent) {
+                    onNodeClick(info.object, srcEvent.shiftKey || srcEvent.ctrlKey);
+                }
             }
         }),
         new IconLayer({
@@ -237,17 +262,27 @@ export const GridMap = React.memo<GridMapProps>(({
             iconMapping: {
                 marker: { x: 0, y: 0, width: 100, height: 100, anchorY: 50, mask: false }
             },
-            getSize: () => 24,
+            getIcon: () => 'marker',
+            getSize: (d: Node) => {
+                const isSelected = selectedNodeIdsSet.has(d.id);
+                return isSelected ? 36 : 24;
+            },
             sizeScale: Math.pow(1.5, (viewState.zoom || 14) - 14),
             sizeMinPixels: 1,
-            updateTriggers: {},
+            updateTriggers: {
+                getSize: [selectedNodeIdsSet]
+            },
             pickable: true,
             autoHighlight: false,
             onHover: (info) => {
                 setHoveredNodeId(info.object ? info.object.id : null);
             },
-            onClick: (info) => {
-                if (info.object) onNodeClick(info.object);
+            onClick: (info, event) => {
+                const srcEvent = (event as any).srcEvent as MouseEvent;
+                console.log('[GridMap] Interaction:', info.object?.id, 'Shift:', srcEvent?.shiftKey);
+                if (info.object && srcEvent) {
+                    onNodeClick(info.object, srcEvent.shiftKey || srcEvent.ctrlKey);
+                }
             }
         }),
         new IconLayer({
@@ -259,17 +294,26 @@ export const GridMap = React.memo<GridMapProps>(({
                 marker: { x: 0, y: 0, width: 100, height: 100, anchorY: 50, mask: false }
             },
             getIcon: () => 'marker',
-            getSize: () => 24,
+            getSize: (d: Node) => {
+                const isSelected = selectedNodeIdsSet.has(d.id);
+                return isSelected ? 36 : 24;
+            },
             sizeScale: Math.pow(1.5, (viewState.zoom || 14) - 14),
             sizeMinPixels: 1,
-            updateTriggers: {},
+            updateTriggers: {
+                getSize: [selectedNodeIdsSet]
+            },
             pickable: true,
             autoHighlight: false,
             onHover: (info) => {
                 setHoveredNodeId(info.object ? info.object.id : null);
             },
-            onClick: (info) => {
-                if (info.object) onNodeClick(info.object);
+            onClick: (info, event) => {
+                const srcEvent = (event as any).srcEvent as MouseEvent;
+                console.log('[GridMap] Interaction:', info.object?.id, 'Shift:', srcEvent?.shiftKey);
+                if (info.object && srcEvent) {
+                    onNodeClick(info.object, srcEvent.shiftKey || srcEvent.ctrlKey);
+                }
             }
         }),
         new IconLayer({
@@ -282,20 +326,29 @@ export const GridMap = React.memo<GridMapProps>(({
                 marker: { x: 0, y: 0, width: 100, height: 100, anchorY: 50, mask: false }
             },
             getIcon: () => 'marker',
-            getSize: () => 16,
+            getSize: (d: Node) => {
+                const isSelected = selectedNodeIdsSet.has(d.id);
+                return isSelected ? 18 : 16;
+            },
             sizeScale: Math.pow(1.5, (viewState.zoom || 14) - 14),
             sizeMinPixels: 1,
-            updateTriggers: {},
+            updateTriggers: {
+                getSize: [selectedNodeIdsSet]
+            },
             pickable: true,
             autoHighlight: false,
             onHover: (info) => {
                 setHoveredNodeId(info.object ? info.object.id : null);
             },
-            onClick: (info) => {
-                if (info.object) onNodeClick(info.object);
+            onClick: (info, event) => {
+                const srcEvent = (event as any).srcEvent as MouseEvent;
+                console.log('[GridMap] Interaction:', info.object?.id, 'Shift:', srcEvent?.shiftKey);
+                if (info.object && srcEvent) {
+                    onNodeClick(info.object, srcEvent.shiftKey || srcEvent.ctrlKey);
+                }
             }
         })
-    ], [nodes, edges, hoveredNodeId, hoveredEdgeId, highlightedNodes, highlightedEdges, selectedNodeId, switchPositions, nodeAverages, voltageScale, onNodeClick, viewState.zoom]);
+    ], [nodes, edges, hoveredNodeId, hoveredEdgeId, highlightedNodes, highlightedEdges, selectedNodeIdsSet, switchPositions, nodeAverages, voltageScale, onNodeClick, viewState.zoom]);
 
     return (
         <div
@@ -326,7 +379,22 @@ export const GridMap = React.memo<GridMapProps>(({
                     initialViewState={viewState}
                     viewState={viewState}
                     onViewStateChange={({ viewState }) => setViewState(viewState)}
-                    controller={true}
+                    onDragStart={() => {
+                        // We track drag starts but don't block them with 'return false'
+                        // as that can interfere with click propagation in some environments
+                    }}
+                    getCursor={({ isHovering }) => isHovering ? 'pointer' : 'grabbing'}
+                    onClick={(info) => {
+                        if (!info.object && onMapClick) {
+                            console.log('[GridMap] Background click - clearing selection');
+                            onMapClick();
+                        }
+                    }}
+                    controller={{
+                        dragRotate: false,
+                        doubleClickZoom: true,
+                        touchRotate: false
+                    }}
                     layers={layers}
                     getTooltip={({ object }) => {
                         if (!object) return null;

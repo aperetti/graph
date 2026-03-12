@@ -5,6 +5,7 @@ import os
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 DB_PATH = os.getenv("DB_PATH", os.path.join(BASE_DIR, "grid_data_cim.duckdb"))
 PARQUET_DIR = os.getenv("PARQUET_DIR", os.path.join(BASE_DIR, "cim_readings"))
+PARQUET_ALARMS_DIR = os.getenv("PARQUET_ALARMS_DIR", os.path.join(BASE_DIR, "cim_alarms"))
 
 def init_db():
     """Initializes the DuckDB database schema."""
@@ -33,9 +34,25 @@ def init_db():
         );
     """)
     
+    # Create the alarms table
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS alarms (
+            alarm_id VARCHAR PRIMARY KEY,
+            node_id VARCHAR,
+            timestamp TIMESTAMP,
+            alarm_code VARCHAR,
+            severity VARCHAR,
+            message VARCHAR,
+            is_active BOOLEAN DEFAULT TRUE
+        );
+    """)
+    
     # Create directory for Parquet files if it doesn't exist
     if not os.path.exists(PARQUET_DIR):
         os.makedirs(PARQUET_DIR)
+        
+    if not os.path.exists(PARQUET_ALARMS_DIR):
+        os.makedirs(PARQUET_ALARMS_DIR)
         
     print(f"Database initialized at {DB_PATH}")
     conn.close()

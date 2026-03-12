@@ -1,6 +1,7 @@
 """NetworkX Graph Engine Implementation."""
 import networkx as nx
 from typing import List
+import itertools
 from src.shared.graph_engine import GraphEngine
 from src.grid.graph_node import GraphNode
 
@@ -42,13 +43,11 @@ class NetworkXEngine(GraphEngine):
         # Add virtual edges between nodes at the same physical location
         for pos, node_ids in self.pos_to_nodes.items():
             if len(node_ids) > 1:
-                for i in range(len(node_ids)):
-                    for j in range(i + 1, len(node_ids)):
-                        u, v = node_ids[i], node_ids[j]
-                        # Add bidirectional virtual "stitch" edges
-                        # We use a special prefix so they doesn't get confused with real edges
-                        self.graph.add_edge(u, v, edge_id=f"stitch_{u}_{v}", virtual=True)
-                        self.graph.add_edge(v, u, edge_id=f"stitch_{v}_{u}", virtual=True)
+                for u, v in itertools.combinations(node_ids, 2):
+                    # Add bidirectional virtual "stitch" edges
+                    # We use a special prefix so they doesn't get confused with real edges
+                    self.graph.add_edge(u, v, edge_id=f"stitch_{u}_{v}", virtual=True)
+                    self.graph.add_edge(v, u, edge_id=f"stitch_{v}_{u}", virtual=True)
 
     def find_downstream(self, start_node_id: str, max_depth: int = None) -> tuple[List[str], List[str]]:
         """Finds all node IDs and edge IDs logically downstream.

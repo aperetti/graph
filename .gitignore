@@ -1,6 +1,7 @@
 # Data Assets
 grid_data*.duckdb
 cim_readings/
+cim_alarms/
 readings/
 readings_scale/
 # IEEE8500.xml is explicitly allowed per user request

@@ -28,8 +28,8 @@ class CalculateAggregateConsumptionUseCase:
         # If no downstream (leaf node like a Meter), query the node itself
         nodes_to_query = downstream_nodes if downstream_nodes else [start_node_id]
         
-        # Format for SQL IN clause
-        nodes_list = "'" + "','".join(nodes_to_query) + "'"
+        # Parameterize SQL IN clause to prevent SQL injection
+        placeholders = ",".join(["?"] * len(nodes_to_query))
         
         query = f"""
             SELECT 
@@ -45,16 +45,21 @@ class CalculateAggregateConsumptionUseCase:
                 ON w.month = EXTRACT(month FROM r.timestamp)
                 AND w.day = EXTRACT(day FROM r.timestamp)
                 AND w.hour = EXTRACT(hour FROM r.timestamp)
-            WHERE r.node_id IN ({nodes_list})
-              AND r.timestamp >= '{start_time}' 
-              AND r.timestamp <= '{end_time}'
+            WHERE r.node_id IN ({placeholders})
+              AND r.timestamp >= CAST(? AS TIMESTAMP)
+              AND r.timestamp <= CAST(? AS TIMESTAMP)
             GROUP BY r.timestamp
             ORDER BY r.timestamp ASC
         """
         
+        # Build parameters list
+        params = []
+        params.extend(nodes_to_query)
+        params.extend([start_time, end_time])
+
         try:
             with duckdb.connect(self.db_path, read_only=True) as conn:
-                results = conn.execute(query).fetchall()
+                results = conn.execute(query, params).fetchall()
                 
             time_series = [
                 {

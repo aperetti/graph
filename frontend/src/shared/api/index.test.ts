@@ -85,8 +85,8 @@ describe('API Client', () => {
                 json: async () => mockData
             });
 
-            const result = await fetchConsumption('node1');
-            expect(globalThis.fetch).toHaveBeenCalledWith('/api/analytics/consumption/node1?');
+            const result = await fetchConsumption('node1', '2023-01-01', '2023-01-31');
+            expect(globalThis.fetch).toHaveBeenCalledWith('/api/analytics/consumption/node1?start_time=2023-01-01&end_time=2023-01-31');
             expect(result).toEqual(mockData);
         });
 
@@ -109,8 +109,8 @@ describe('API Client', () => {
                 json: async () => mockData
             });
 
-            const result = await fetchConsumption('node1', '2023-01-01');
-            expect(globalThis.fetch).toHaveBeenCalledWith('/api/analytics/consumption/node1?start_time=2023-01-01&');
+            const result = await fetchConsumption('node1', '2023-01-01', '2023-01-31');
+            expect(globalThis.fetch).toHaveBeenCalledWith('/api/analytics/consumption/node1?start_time=2023-01-01&end_time=2023-01-31');
             expect(result).toEqual(mockData);
         });
 
@@ -119,7 +119,7 @@ describe('API Client', () => {
                 ok: false
             });
 
-            await expect(fetchConsumption('node1')).rejects.toThrow('Failed to fetch consumption');
+            await expect(fetchConsumption('node1', '2023-01-01', '2023-01-31')).rejects.toThrow('Failed to fetch consumption');
         });
     });
 
@@ -131,8 +131,8 @@ describe('API Client', () => {
                 json: async () => mockData
             });
 
-            const result = await fetchVoltageDistribution('node1');
-            expect(globalThis.fetch).toHaveBeenCalledWith('/api/analytics/voltage/node1?');
+            const result = await fetchVoltageDistribution('node1', '2023-01-01', '2023-01-31');
+            expect(globalThis.fetch).toHaveBeenCalledWith('/api/analytics/voltage/node1?start_time=2023-01-01&end_time=2023-01-31');
             expect(result).toEqual(mockData);
         });
 
@@ -155,8 +155,8 @@ describe('API Client', () => {
                 json: async () => mockData
             });
 
-            const result = await fetchVoltageDistribution('node1', '2023-01-01', undefined, 90);
-            expect(globalThis.fetch).toHaveBeenCalledWith('/api/analytics/voltage/node1?start_time=2023-01-01&degrees=90');
+            const result = await fetchVoltageDistribution('node1', '2023-01-01', '2023-01-31', 90);
+            expect(globalThis.fetch).toHaveBeenCalledWith('/api/analytics/voltage/node1?start_time=2023-01-01&end_time=2023-01-31&degrees=90');
             expect(result).toEqual(mockData);
         });
 
@@ -167,8 +167,8 @@ describe('API Client', () => {
                 json: async () => mockData
             });
 
-            const result = await fetchVoltageDistribution('node1', undefined, undefined, 0);
-            expect(globalThis.fetch).toHaveBeenCalledWith('/api/analytics/voltage/node1?degrees=0');
+            const result = await fetchVoltageDistribution('node1', '2023-01-01', '2023-01-31', 0);
+            expect(globalThis.fetch).toHaveBeenCalledWith('/api/analytics/voltage/node1?start_time=2023-01-01&end_time=2023-01-31&degrees=0');
             expect(result).toEqual(mockData);
         });
 
@@ -177,7 +177,7 @@ describe('API Client', () => {
                 ok: false
             });
 
-            await expect(fetchVoltageDistribution('node1')).rejects.toThrow('Failed to fetch voltage limits');
+            await expect(fetchVoltageDistribution('node1', '2023-01-01', '2023-01-31')).rejects.toThrow('Failed to fetch voltage limits');
         });
     });
 

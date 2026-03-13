@@ -146,3 +146,16 @@ export const fetchAlarms = async (nodeId: string, includeDownstream: boolean = t
     }
     return res.json();
 };
+export const nlQuery = async (query: string): Promise<any> => {
+    const res = await fetch(`${API_BASE}/agent/query`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ query }),
+    });
+    if (!res.ok) {
+        throw new Error('Query failed');
+    }
+    return res.json();
+};

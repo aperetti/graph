@@ -222,6 +222,34 @@ export default function App() {
     }
   };
 
+  const performConsumptionFetch = async (nodeIds: string[], start: string, end: string) => {
+    try {
+      const res = await fetchConsumption(nodeIds, start, end);
+      if (res.downstream_node_ids) {
+        setHighlightedNodes(new Set(res.downstream_node_ids));
+      } else {
+        setHighlightedNodes(new Set());
+      }
+      if (res.downstream_edge_ids) {
+        setHighlightedEdges(new Set(res.downstream_edge_ids));
+      } else {
+        setHighlightedEdges(new Set());
+      }
+      if (res.time_series && res.time_series.length > 0) {
+        setConsumptionData(res.time_series);
+      }
+      if (res.estimated_rows !== undefined) {
+        setConsumptionEstimatedRows(res.estimated_rows);
+      }
+    } catch (err) {
+      console.error('[App] Failed to fetch consumption:', err);
+    } finally {
+      setConsumptionLoading(false);
+      setConsumptionMinimized(false);
+      setFitBoundsTrigger(prev => prev + 1);
+    }
+  };
+
   const handleShowConsumption = async (rangeOption?: string, overrideNode?: Node) => {
     const nodesToQuery = overrideNode ? [overrideNode] : selectedNodes;
     if (nodesToQuery.length === 0) return;
@@ -252,82 +280,38 @@ export default function App() {
     setNodeAverages(null);
     setConsumptionLoading(true);
     setConsumptionModalOpen(true);
+    setConsumptionPausedForLargeQuery(false);
+    setPendingConsumptionRequest(null);
 
     const nodeIds = nodesToQuery.map(n => n.id);
 
-    // Fetch estimate separately to update the progress UI
-    fetchConsumptionEstimate(nodeIds, start, end)
-      .then(res => setConsumptionEstimatedRows(res.estimated_rows))
-      .catch(err => console.error('[App] Consumption estimate failed:', err));
-
     try {
-      const res = await fetchConsumption(nodeIds, start, end);
-      if (res.downstream_node_ids) {
-        setHighlightedNodes(new Set(res.downstream_node_ids));
-      } else {
-        setHighlightedNodes(new Set());
+      const estRes = await fetchConsumptionEstimate(nodeIds, start, end);
+      setConsumptionEstimatedRows(estRes.estimated_rows);
+
+      if (estRes.estimated_rows > 10000000) {
+        setConsumptionPausedForLargeQuery(true);
+        setPendingConsumptionRequest({ nodeIds, start, end });
+        return;
       }
-      if (res.downstream_edge_ids) {
-        setHighlightedEdges(new Set(res.downstream_edge_ids));
-      } else {
-        setHighlightedEdges(new Set());
-      }
-      if (res.time_series && res.time_series.length > 0) {
-        setConsumptionData(res.time_series);
-      }
-      if (res.estimated_rows !== undefined) {
-        setConsumptionEstimatedRows(res.estimated_rows);
-      }
+
+      await performConsumptionFetch(nodeIds, start, end);
     } catch (err) {
-      console.error('[App] Failed to fetch consumption:', err);
-    } finally {
+      console.error('[App] Consumption safety check failed:', err);
       setConsumptionLoading(false);
-      setConsumptionMinimized(false);
-      setFitBoundsTrigger(prev => prev + 1);
     }
   };
 
-  const handleShowVoltageDistribution = async (rangeOption?: string, overrideNode?: Node, degrees?: number | null) => {
-    const nodesToQuery = overrideNode ? [overrideNode] : selectedNodes;
-    if (nodesToQuery.length === 0) return;
-    if (overrideNode) setSelectedNodes([overrideNode]);
+  const handleConfirmConsumption = async () => {
+    if (!pendingConsumptionRequest) return;
+    setConsumptionPausedForLargeQuery(false);
+    setConsumptionLoading(true);
+    const { nodeIds, start, end } = pendingConsumptionRequest;
+    await performConsumptionFetch(nodeIds, start, end);
+    setPendingConsumptionRequest(null);
+  };
 
-    const nodeIds = nodesToQuery.map(n => n.id);
-
-    const range = calculateRange(globalConfig);
-    let start = range.start;
-    let end = range.end;
-    if (globalConfig.endDateType === 'now') {
-      setDateRange(range);
-    }
-
-    if (rangeOption) {
-      const endDate = new Date();
-      const startDate = new Date();
-      if (rangeOption === '1W') startDate.setDate(startDate.getDate() - 7);
-      if (rangeOption === '1M') startDate.setMonth(startDate.getMonth() - 1);
-      if (rangeOption === '1Y') startDate.setFullYear(startDate.getFullYear() - 1);
-
-      start = startDate.toISOString().split('.')[0];
-      end = endDate.toISOString().split('.')[0];
-      setDateRange({ start, end });
-    }
-
-    setConsumptionModalOpen(false);
-    setVoltageData([]);
-    setVoltageScatterData([]);
-    setVoltageEstimatedRows(undefined);
-    setNodeAverages(null);
-    setVoltageLoading(true);
-    setVoltageModalOpen(true);
-    const degreesToUse = degrees !== undefined ? degrees : voltageDegrees;
-    setVoltageDegrees(degreesToUse);
-
-    // Fetch estimate separately to update the progress UI
-    fetchVoltageEstimate(nodeIds, start, end, degreesToUse === null ? undefined : degreesToUse)
-      .then(res => setVoltageEstimatedRows(res.estimated_rows))
-      .catch(err => console.error('[App] Voltage estimate failed:', err));
-
+  const performVoltageFetch = async (nodeIds: string[], start: string, end: string, degreesToUse: number | null) => {
     try {
       const res = await fetchVoltageDistribution(nodeIds, start, end, degreesToUse === null ? undefined : degreesToUse);
       if (res.downstream_node_ids) {
@@ -379,6 +363,71 @@ export default function App() {
       setVoltageMinimized(false);
       setFitBoundsTrigger(prev => prev + 1);
     }
+  };
+
+  const handleShowVoltageDistribution = async (rangeOption?: string, overrideNode?: Node, degrees?: number | null) => {
+    const nodesToQuery = overrideNode ? [overrideNode] : selectedNodes;
+    if (nodesToQuery.length === 0) return;
+    if (overrideNode) setSelectedNodes([overrideNode]);
+
+    const nodeIds = nodesToQuery.map(n => n.id);
+
+    const range = calculateRange(globalConfig);
+    let start = range.start;
+    let end = range.end;
+    if (globalConfig.endDateType === 'now') {
+      setDateRange(range);
+    }
+
+    if (rangeOption) {
+      const endDate = new Date();
+      const startDate = new Date();
+      if (rangeOption === '1W') startDate.setDate(startDate.getDate() - 7);
+      if (rangeOption === '1M') startDate.setMonth(startDate.getMonth() - 1);
+      if (rangeOption === '1Y') startDate.setFullYear(startDate.getFullYear() - 1);
+
+      start = startDate.toISOString().split('.')[0];
+      end = endDate.toISOString().split('.')[0];
+      setDateRange({ start, end });
+    }
+
+    setConsumptionModalOpen(false);
+    setVoltageData([]);
+    setVoltageScatterData([]);
+    setVoltageEstimatedRows(undefined);
+    setNodeAverages(null);
+    setVoltageLoading(true);
+    setVoltageModalOpen(true);
+    setVoltagePausedForLargeQuery(false);
+    setPendingVoltageRequest(null);
+
+    const degreesToUse = degrees !== undefined ? degrees : voltageDegrees;
+    setVoltageDegrees(degreesToUse);
+
+    try {
+      const estRes = await fetchVoltageEstimate(nodeIds, start, end, degreesToUse === null ? undefined : degreesToUse);
+      setVoltageEstimatedRows(estRes.estimated_rows);
+
+      if (estRes.estimated_rows > 10000000) {
+        setVoltagePausedForLargeQuery(true);
+        setPendingVoltageRequest({ nodeIds, start, end, degrees: degreesToUse });
+        return;
+      }
+
+      await performVoltageFetch(nodeIds, start, end, degreesToUse);
+    } catch (err) {
+      console.error('[App] Voltage safety check failed:', err);
+      setVoltageLoading(false);
+    }
+  };
+
+  const handleConfirmVoltage = async () => {
+    if (!pendingVoltageRequest) return;
+    setVoltagePausedForLargeQuery(false);
+    setVoltageLoading(true);
+    const { nodeIds, start, end, degrees } = pendingVoltageRequest;
+    await performVoltageFetch(nodeIds, start, end, degrees);
+    setPendingVoltageRequest(null);
   };
 
   return (
@@ -545,6 +594,8 @@ export default function App() {
             nodeName={selectedNodes.length > 1 ? `${selectedNodes.length} Assets Aggregate` : (selectedNodes[0]?.name || selectedNodes[0]?.id)}
             isMinimized={consumptionMinimized}
             onMinimize={() => setConsumptionMinimized(true)}
+            isPaused={consumptionPausedForLargeQuery}
+            onConfirm={handleConfirmConsumption}
           />
 
           <VoltageDistributionModal
@@ -560,6 +611,8 @@ export default function App() {
             onDegreesChange={(d: number | null) => handleShowVoltageDistribution(undefined, undefined, d)}
             isMinimized={voltageMinimized}
             onMinimize={() => setVoltageMinimized(true)}
+            isPaused={voltagePausedForLargeQuery}
+            onConfirm={handleConfirmVoltage}
           />
 
           {/* Minimized Modal Tabs */}

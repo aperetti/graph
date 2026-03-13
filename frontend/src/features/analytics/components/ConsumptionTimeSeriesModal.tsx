@@ -1,6 +1,6 @@
 import { memo, useState, useMemo, useEffect } from 'react';
 import { Paper, Group, Title, ActionIcon, Box, Text, Stack, Select, Slider, SimpleGrid, Collapse, Button } from '@mantine/core';
-import { X, Filter, ChevronDown, ChevronUp, Maximize2 } from 'lucide-react';
+import { X, Filter, ChevronDown, ChevronUp, Maximize2, AlertTriangle, Clock, Activity } from 'lucide-react';
 import ReactECharts from 'echarts-for-react';
 import { Rnd } from 'react-rnd';
 import { ScadaLoadingAnimation } from '../../../components/ScadaLoadingAnimation';
@@ -19,6 +19,8 @@ interface Props {
     nodeName: string | undefined;
     isMinimized?: boolean;
     onMinimize?: () => void;
+    isPaused?: boolean;
+    onConfirm?: () => void;
 }
 
 const MONTH_OPTIONS = [
@@ -50,6 +52,8 @@ export const ConsumptionTimeSeriesModal = memo(function ConsumptionTimeSeriesMod
     nodeName,
     isMinimized,
     onMinimize,
+    isPaused,
+    onConfirm,
 }: Props) {
     const [startHour, setStartHour] = useState<string>('0');
     const [endHour, setEndHour] = useState<string>('23');
@@ -419,7 +423,75 @@ export const ConsumptionTimeSeriesModal = memo(function ConsumptionTimeSeriesMod
                 </Box>
 
                 <Box style={{ flex: 1, position: 'relative', width: '100%', overflow: 'hidden', padding: '10px' }}>
-                    {loading ? (
+                    {isPaused ? (
+                        <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', padding: '20px' }}>
+                            <Stack align="center" gap="xl" style={{ maxWidth: 500 }}>
+                                <Box style={{ position: 'relative', width: '100%' }}>
+                                    {/* Grid Background */}
+                                    <Box
+                                        style={{
+                                            position: 'absolute',
+                                            inset: 0,
+                                            backgroundImage: 'linear-gradient(rgba(51, 154, 240, 0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(51, 154, 240, 0.05) 1px, transparent 1px)',
+                                            backgroundSize: '15px 15px',
+                                            border: '1px solid rgba(51, 154, 240, 0.2)',
+                                            borderRadius: '8px',
+                                            backgroundColor: 'rgba(26, 27, 30, 0.3)'
+                                        }}
+                                    />
+                                    
+                                    <Stack p="xl" align="center" gap="md" style={{ position: 'relative' }}>
+                                        <Group gap="xs">
+                                            <AlertTriangle size={18} color="#fab005" />
+                                            <Text size="sm" ff="monospace" fw={700} c="blue.4" style={{ letterSpacing: '1px' }}>
+                                                DATASET_CAPACITY_WARNING
+                                            </Text>
+                                        </Group>
+                                        
+                                        <Stack gap={4} align="center">
+                                            <Text size="xs" ff="monospace" c="dimmed">ANALYSIS SCOPE</Text>
+                                            <Text size="xl" ff="monospace" fw={700} c="white">
+                                                {(estimatedRows! / 1000000).toFixed(1)}M READINGS
+                                            </Text>
+                                        </Stack>
+
+                                        <Paper withBorder p="xs" bg="rgba(51, 154, 240, 0.05)" style={{ borderStyle: 'dashed', borderColor: 'rgba(51, 154, 240, 0.3)' }}>
+                                            <Group gap="sm">
+                                                <Clock size={14} color="#339af0" />
+                                                <Text size="xs" ff="monospace" c="blue.4">
+                                                    EST. COMPUTE TIME: {Math.ceil((estimatedRows! / 10000000) * 5)}s
+                                                </Text>
+                                            </Group>
+                                        </Paper>
+
+                                        <Box mt="xs">
+                                            <Text size="xs" c="dimmed" ff="monospace" ta="center" style={{ maxWidth: 350, lineHeight: 1.4 }}>
+                                                SYSTEM IMPACT: MODERATE<br/>
+                                                LARGE QUERIES MAY TEMPORARILY AFFECT CONCURRENT ANALYTICS PERFORMANCE.
+                                            </Text>
+                                        </Box>
+
+                                        <Group mt="lg" gap="md">
+                                            <Button variant="subtle" size="xs" color="gray" onClick={onClose} ff="monospace">
+                                                [ ABORT_ADJUST ]
+                                            </Button>
+                                            <Button 
+                                                color="blue" 
+                                                size="sm" 
+                                                onClick={onConfirm} 
+                                                leftSection={<Activity size={16} />}
+                                                ff="monospace"
+                                                variant="light"
+                                                style={{ border: '1px solid rgba(51, 154, 240, 0.4)' }}
+                                            >
+                                                EXECUTE_QUERY_PLAN
+                                            </Button>
+                                        </Group>
+                                    </Stack>
+                                </Box>
+                            </Stack>
+                        </Box>
+                    ) : loading ? (
                         <ScadaLoadingAnimation estimatedRows={estimatedRows} />
                     ) : data.length === 0 ? (
                         <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>

@@ -1,4 +1,4 @@
-import { Paper, Group, ActionIcon, Tooltip, Badge, Text, Divider, Transition } from '@mantine/core';
+import { Paper, Group, ActionIcon, Tooltip, Badge, Text, Divider, Transition, Stack } from '@mantine/core';
 import { BarChart3, Activity, X } from 'lucide-react';
 import type { Node } from '../../../shared/types';
 
@@ -8,6 +8,9 @@ interface AnalysisToolbarProps {
     onViewConsumption: () => void;
     onViewVoltage: () => void;
     visible: boolean;
+    dateRange: { start: string, end: string };
+    configLabel: string;
+    onOpenSettings: () => void;
 }
 
 export function AnalysisToolbar({
@@ -15,7 +18,10 @@ export function AnalysisToolbar({
     onClearSelection,
     onViewConsumption,
     onViewVoltage,
-    visible
+    visible,
+    dateRange,
+    configLabel,
+    onOpenSettings
 }: AnalysisToolbarProps) {
     const count = selectedNodes.length;
 
@@ -35,7 +41,10 @@ export function AnalysisToolbar({
                     }}
                 >
                     <Group gap="xs">
-                        <Group gap="xs" onClick={onClearSelection} style={{ cursor: 'pointer' }}>
+                        <Group gap="xs" onClick={(e) => {
+                            e.stopPropagation();
+                            onClearSelection();
+                        }} style={{ cursor: 'pointer' }}>
                             <Badge color="blue" variant="filled" size="lg" radius="sm">
                                 {count}
                             </Badge>
@@ -43,6 +52,15 @@ export function AnalysisToolbar({
                                 Assets Selected
                             </Text>
                         </Group>
+
+                        <Stack gap={0} onClick={(e) => {
+                            e.stopPropagation();
+                            onOpenSettings();
+                        }} style={{ cursor: 'pointer' }}>
+                            <Text size="10px" c="blue.4" fw={600} style={{ textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                {configLabel} • {new Date(dateRange.start).toLocaleDateString()} - {new Date(dateRange.end).toLocaleDateString()}
+                            </Text>
+                        </Stack>
 
                         <Divider orientation="vertical" />
 

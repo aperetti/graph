@@ -1,12 +1,12 @@
 import '@mantine/core/styles.css';
 import '@mantine/dates/styles.css';
 import { useState, useEffect, useCallback } from 'react';
-import { MantineProvider, AppShell, Box, Stack, ActionIcon, Menu, Group, Tooltip } from '@mantine/core';
+import { useMediaQuery } from '@mantine/hooks';
+import { MantineProvider, AppShell, Box, Stack, ActionIcon, Menu, Group, Tooltip, Paper, Text as MantineText } from '@mantine/core';
 import { Menu as MenuIcon, X, Search, Activity, Settings } from 'lucide-react';
 
 import { GridMap } from './features/grid/components/GridMap';
 import { AnalysisToolbar } from './features/grid/components/AnalysisToolbar';
-import { GridContextMenu } from './features/grid/components/GridContextMenu';
 import { AnalyticsPanel } from './features/analytics/components/AnalyticsPanel';
 import { ConsumptionTimeSeriesModal } from './features/analytics/components/ConsumptionTimeSeriesModal';
 import { VoltageDistributionModal } from './features/analytics/components/VoltageDistributionModal';
@@ -108,9 +108,17 @@ export default function App() {
   const [voltageEstimatedRows, setVoltageEstimatedRows] = useState<number | undefined>();
   const [voltageDegrees, setVoltageDegrees] = useState<number | null>(5);
   const [voltageTimeSeries, setVoltageTimeSeries] = useState<any[]>([]);
+  const [consumptionPausedForLargeQuery, setConsumptionPausedForLargeQuery] = useState(false);
+  const [voltagePausedForLargeQuery, setVoltagePausedForLargeQuery] = useState(false);
+  const [pendingConsumptionRequest, setPendingConsumptionRequest] = useState<{ nodeIds: string[], start: string, end: string } | null>(null);
+  const [pendingVoltageRequest, setPendingVoltageRequest] = useState<{ nodeIds: string[], start: string, end: string, degrees: number | null } | null>(null);
+
+  const [consumptionMinimized, setConsumptionMinimized] = useState(false);
+  const [voltageMinimized, setVoltageMinimized] = useState(false);
 
   const [highlightedNodes, setHighlightedNodes] = useState<Set<string>>(new Set());
   const [highlightedEdges, setHighlightedEdges] = useState<Set<string>>(new Set());
+  const [fitBoundsTrigger, setFitBoundsTrigger] = useState(0);
   const [nodeAverages, setNodeAverages] = useState<Record<string, number> | null>(null);
 
   const [voltageScale, setVoltageScale] = useState(() => {
@@ -135,22 +143,31 @@ export default function App() {
     localStorage.setItem('voltageScale', JSON.stringify(voltageScale));
   }, [voltageScale]);
 
-  const [contextMenu, setContextMenu] = useState<{ x: number, y: number, item: any, type: 'node' | 'edge' } | null>(null);
 
-  const handleCloseConsumptionModal = useCallback(() => setConsumptionModalOpen(false), []);
-  const handleCloseVoltageModal = useCallback(() => setVoltageModalOpen(false), []);
+  const handleCloseConsumptionModal = useCallback(() => {
+    setConsumptionModalOpen(false);
+    setConsumptionMinimized(false);
+  }, []);
+  const handleCloseVoltageModal = useCallback(() => {
+    setVoltageModalOpen(false);
+    setVoltageMinimized(false);
+  }, []);
   const handleClearSelection = useCallback(() => setSelectedNodes([]), []);
-  const handleCloseContextMenu = useCallback(() => setContextMenu(null), []);
+  const isMobile = useMediaQuery('(max-width: 768px)');
 
   const onNodeClick = useCallback((node: Node, multiSelect: boolean) => {
-    console.log('[App] onNodeClick:', node.id, 'multiSelect:', multiSelect);
+    console.log('[App] onNodeClick:', node.id, 'multiSelect:', multiSelect, 'isMobile:', isMobile);
     setSelectedNodes(prev => {
-      if (!multiSelect) return [node];
+      // On mobile, default to multi-select (toggle behavior)
+      const effectiveMultiSelect = isMobile ? true : multiSelect;
+      
+      if (!effectiveMultiSelect) return [node];
+      
       const exists = prev.find(n => n.id === node.id);
       if (exists) return prev.filter(n => n.id !== node.id);
       return [...prev, node];
     });
-  }, []);
+  }, [isMobile]);
 
   useEffect(() => {
     fetchTopology()
@@ -265,6 +282,8 @@ export default function App() {
       console.error('[App] Failed to fetch consumption:', err);
     } finally {
       setConsumptionLoading(false);
+      setConsumptionMinimized(false);
+      setFitBoundsTrigger(prev => prev + 1);
     }
   };
 
@@ -357,6 +376,8 @@ export default function App() {
       console.error('[App] Failed to fetch voltage distribution:', err);
     } finally {
       setVoltageLoading(false);
+      setVoltageMinimized(false);
+      setFitBoundsTrigger(prev => prev + 1);
     }
   };
 
@@ -383,25 +404,16 @@ export default function App() {
               nodes={nodes}
               edges={edges}
               onNodeClick={onNodeClick}
-              onNodeRightClick={(node, x, y) => setContextMenu({ x, y, item: node, type: 'node' })}
-              onEdgeRightClick={(edge, x, y) => setContextMenu({ x, y, item: edge, type: 'edge' })}
               highlightedNodes={highlightedNodes}
               highlightedEdges={highlightedEdges}
               selectedNodeIds={selectedNodes.map(n => n.id)}
               nodeAverages={nodeAverages}
               onMapClick={handleClearSelection}
               voltageScale={voltageScale}
+              fitHighlightedNodesTrigger={fitBoundsTrigger}
             />
           </Box>
 
-          {/* Right-Click Context Menu */}
-          <GridContextMenu
-            contextMenu={contextMenu}
-            nodes={nodes}
-            onClose={handleCloseContextMenu}
-            onShowConsumption={(range, node) => handleShowConsumption(range, node)}
-            onShowVoltage={(range, node) => handleShowVoltageDistribution(range, node)}
-          />
 
           {/* Persistent Overlay Panels */}
           <VoltageScalePanel
@@ -412,88 +424,93 @@ export default function App() {
 
           {/* Floating Action Button and Analysis Toolbar */}
           <Box style={{ position: 'absolute', top: 20, right: 20, zIndex: 100 }}>
-            <Group gap="sm">
+            <Stack align="flex-end" gap="sm">
+              <Group gap="sm">
+                <Tooltip label="Global Settings" position="bottom" withArrow>
+                  <ActionIcon
+                    variant="filled"
+                    color="blue"
+                    size="xl"
+                    radius="md"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSettingsOpen(true);
+                    }}
+                    style={{
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      pointerEvents: 'auto'
+                    }}
+                  >
+                    <Settings size={20} />
+                  </ActionIcon>
+                </Tooltip>
+
+                <Menu shadow="md" width={200} position="bottom-end" withArrow offset={10}>
+                  <Menu.Target>
+                    <ActionIcon
+                      variant="filled"
+                      color="dark"
+                      size="xl"
+                      radius="md"
+                      style={{
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                        border: '1px solid rgba(255,255,255,0.1)'
+                      }}
+                    >
+                      <MenuIcon />
+                    </ActionIcon>
+                  </Menu.Target>
+
+                  <Menu.Dropdown bg="rgba(26, 27, 30, 0.95)" style={{ backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.1)' }}>
+                    <Menu.Label>System Analytics</Menu.Label>
+                    <Menu.Item
+                      leftSection={<Settings size={16} />}
+                      onClick={() => {
+                        setSettingsOpen(true);
+                      }}
+                    >
+                      Global Analysis Settings
+                    </Menu.Item>
+                    <Menu.Item
+                      leftSection={<Activity size={16} />}
+                      onClick={() => setActiveSidePanel(p => p === 'analytics' ? 'none' : 'analytics')}
+                      bg={activeSidePanel === 'analytics' ? 'rgba(51, 154, 240, 0.2)' : undefined}
+                    >
+                      Voltage Map Settings
+                    </Menu.Item>
+
+                    <Menu.Label>Resources</Menu.Label>
+                    <Menu.Item
+                      leftSection={<Search size={16} />}
+                      onClick={() => window.open('/docs/', '_blank')}
+                    >
+                      Documentation
+                    </Menu.Item>
+
+                    <Menu.Divider />
+                    <Menu.Item
+                      leftSection={<X size={16} />}
+                      color="red"
+                      onClick={() => setActiveSidePanel('none')}
+                    >
+                      Close All Panels
+                    </Menu.Item>
+                  </Menu.Dropdown>
+                </Menu>
+              </Group>
+
               <AnalysisToolbar
                 selectedNodes={selectedNodes}
                 onClearSelection={handleClearSelection}
                 onViewConsumption={() => handleShowConsumption()}
                 onViewVoltage={() => handleShowVoltageDistribution()}
                 visible={selectedNodes.length > 0}
+                dateRange={dateRange}
+                configLabel={globalConfig.defaultDuration === 'custom' ? `${globalConfig.customDays} Days` : globalConfig.defaultDuration}
+                onOpenSettings={() => setSettingsOpen(true)}
               />
-
-              <Tooltip label="Global Settings" position="bottom" withArrow>
-                <ActionIcon
-                  variant="filled"
-                  color="blue"
-                  size="xl"
-                  radius="md"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setSettingsOpen(true);
-                  }}
-                  style={{
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
-                    border: '1px solid rgba(255,255,255,0.1)',
-                    pointerEvents: 'auto'
-                  }}
-                >
-                  <Settings size={20} />
-                </ActionIcon>
-              </Tooltip>
-
-              <Menu shadow="md" width={200} position="bottom-end" withArrow offset={10}>
-                <Menu.Target>
-                  <ActionIcon
-                    variant="filled"
-                    color="dark"
-                    size="xl"
-                    radius="md"
-                    style={{
-                      boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
-                      border: '1px solid rgba(255,255,255,0.1)'
-                    }}
-                  >
-                    <MenuIcon />
-                  </ActionIcon>
-                </Menu.Target>
-
-                <Menu.Dropdown bg="rgba(26, 27, 30, 0.95)" style={{ backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.1)' }}>
-                  <Menu.Label>System Analytics</Menu.Label>
-                  <Menu.Item
-                    leftSection={<Settings size={16} />}
-                    onClick={() => {
-                      setSettingsOpen(true);
-                    }}
-                  >
-                    Global Analysis Settings
-                  </Menu.Item>
-                  <Menu.Item
-                    leftSection={<Activity size={16} />}
-                    onClick={() => setActiveSidePanel(p => p === 'analytics' ? 'none' : 'analytics')}
-                    bg={activeSidePanel === 'analytics' ? 'rgba(51, 154, 240, 0.2)' : undefined}
-                  >
-                    Voltage Map Settings
-                  </Menu.Item>
-
-                  <Menu.Label>Resources</Menu.Label>
-                  <Menu.Item
-                    leftSection={<Search size={16} />}
-                    onClick={() => window.open('/docs/', '_blank')}
-                  >
-                    Documentation
-                  </Menu.Item>
-
-                  <Menu.Divider />
-                  <Menu.Item
-                    leftSection={<X size={16} />}
-                    color="red"
-                    onClick={() => setActiveSidePanel('none')}
-                  >
-                    Close All Panels
-                  </Menu.Item>
-                </Menu.Dropdown>
-              </Menu>
-            </Group>
+            </Stack>
           </Box>
 
           {activeSidePanel !== 'none' && (
@@ -526,6 +543,8 @@ export default function App() {
             data={consumptionData}
             estimatedRows={consumptionEstimatedRows}
             nodeName={selectedNodes.length > 1 ? `${selectedNodes.length} Assets Aggregate` : (selectedNodes[0]?.name || selectedNodes[0]?.id)}
+            isMinimized={consumptionMinimized}
+            onMinimize={() => setConsumptionMinimized(true)}
           />
 
           <VoltageDistributionModal
@@ -539,7 +558,47 @@ export default function App() {
             nodeName={selectedNodes[0]?.name}
             degrees={voltageDegrees}
             onDegreesChange={(d: number | null) => handleShowVoltageDistribution(undefined, undefined, d)}
+            isMinimized={voltageMinimized}
+            onMinimize={() => setVoltageMinimized(true)}
           />
+
+          {/* Minimized Modal Tabs */}
+          <Box style={{ position: 'absolute', bottom: 20, left: 20, zIndex: 110, display: 'flex', gap: '10px' }}>
+            {consumptionModalOpen && consumptionMinimized && (
+              <Paper 
+                withBorder 
+                px="md" 
+                py="xs" 
+                onClick={() => setConsumptionMinimized(false)}
+                style={{ cursor: 'pointer', background: 'rgba(26, 27, 30, 0.95)', backdropFilter: 'blur(10px)' }}
+              >
+                <Group gap="xs">
+                  <Activity size={16} color="#339af0" />
+                  <MantineText size="sm" fw={500}>Consumption: {selectedNodes[0]?.name || selectedNodes[0]?.id}</MantineText>
+                  <ActionIcon size="xs" variant="subtle" onClick={(e) => { e.stopPropagation(); handleCloseConsumptionModal(); }}>
+                    <X size={12} />
+                  </ActionIcon>
+                </Group>
+              </Paper>
+            )}
+            {voltageModalOpen && voltageMinimized && (
+              <Paper 
+                withBorder 
+                px="md" 
+                py="xs" 
+                onClick={() => setVoltageMinimized(false)}
+                style={{ cursor: 'pointer', background: 'rgba(26, 27, 30, 0.95)', backdropFilter: 'blur(10px)' }}
+              >
+                <Group gap="xs">
+                  <Activity size={16} color="#fab005" />
+                  <MantineText size="sm" fw={500}>Voltage: {selectedNodes[0]?.name}</MantineText>
+                  <ActionIcon size="xs" variant="subtle" onClick={(e) => { e.stopPropagation(); handleCloseVoltageModal(); }}>
+                    <X size={12} />
+                  </ActionIcon>
+                </Group>
+              </Paper>
+            )}
+          </Box>
 
         </AppShell.Main>
       </AppShell>

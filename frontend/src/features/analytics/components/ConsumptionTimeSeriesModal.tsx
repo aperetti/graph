@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { memo, useState, useMemo, useEffect } from 'react';
 import { Paper, Group, Title, ActionIcon, Box, Text, Stack, Select, Slider, SimpleGrid, Collapse, Button } from '@mantine/core';
 import { X, Filter, ChevronDown, ChevronUp, Maximize2 } from 'lucide-react';
 import ReactECharts from 'echarts-for-react';
@@ -17,6 +17,8 @@ interface Props {
     data: ReadingData[];
     estimatedRows?: number;
     nodeName: string | undefined;
+    isMinimized?: boolean;
+    onMinimize?: () => void;
 }
 
 const MONTH_OPTIONS = [
@@ -39,13 +41,15 @@ const HOUR_OPTIONS = Array.from({ length: 24 }, (_, i) => ({
     label: `${i.toString().padStart(2, '0')}:00`
 }));
 
-export function ConsumptionTimeSeriesModal({
+export const ConsumptionTimeSeriesModal = memo(function ConsumptionTimeSeriesModal({
     isOpen,
     onClose,
     loading,
     data,
     estimatedRows,
     nodeName,
+    isMinimized,
+    onMinimize,
 }: Props) {
     const [startHour, setStartHour] = useState<string>('0');
     const [endHour, setEndHour] = useState<string>('23');
@@ -297,6 +301,11 @@ export function ConsumptionTimeSeriesModal({
 
     if (!isOpen) return null;
 
+    if (isMinimized) return null; // We render minimized state separately in App.tsx or handle it here. 
+    // Wait, if I return null, it's hidden. Let's let the modal handle its own minimized UI if it's easier, or return null and let App.tsx render a tab.
+    // The plan says "Render minimized tabs at the bottom of the screen when a modal is minimized" in App.tsx.
+    // So returning null here is correct when isMinimized is true.
+
     return (
         <Rnd
             size={{ width: rndState.width, height: rndState.height }}
@@ -344,7 +353,12 @@ export function ConsumptionTimeSeriesModal({
                             >
                                 Filters
                             </Button>
-                            <ActionIcon variant="subtle" onClick={onClose}>
+                            {onMinimize && (
+                                <ActionIcon variant="subtle" onClick={onMinimize} title="Minimize">
+                                    <ChevronDown size={16} />
+                                </ActionIcon>
+                            )}
+                            <ActionIcon variant="subtle" onClick={onClose} title="Close">
                                 <X size={16} />
                             </ActionIcon>
                         </Group>
@@ -711,4 +725,4 @@ export function ConsumptionTimeSeriesModal({
             </Paper>
         </Rnd >
     );
-}
+});

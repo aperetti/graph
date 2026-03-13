@@ -1,15 +1,14 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import DeckGL from '@deck.gl/react';
 import { ScatterplotLayer, PathLayer, IconLayer } from '@deck.gl/layers';
 import { PathStyleExtension } from '@deck.gl/extensions';
+import { WebMercatorViewport } from '@deck.gl/core';
 import type { Node, Edge } from '../../../shared/types';
 
 interface GridMapProps {
     nodes: Node[];
     edges: Edge[];
     onNodeClick: (node: Node, multiSelect: boolean) => void;
-    onNodeRightClick?: (node: Node, x: number, y: number) => void;
-    onEdgeRightClick?: (edge: Edge, x: number, y: number) => void;
     highlightedNodes?: Set<string>;
     highlightedEdges?: Set<string>;
     selectedNodeIds?: string[];
@@ -21,7 +20,8 @@ interface GridMapProps {
         lowWarning: number;
         criticalLow: number;
         baseVoltage: number;
-    }
+    };
+    fitHighlightedNodesTrigger?: number;
 }
 const stringToColor = (str: string): [number, number, number] => {
     let hash = 0;
@@ -66,14 +66,13 @@ export const GridMap = React.memo<GridMapProps>(({
     nodes,
     edges,
     onNodeClick,
-    onNodeRightClick,
-    onEdgeRightClick,
     highlightedNodes = new Set(),
     highlightedEdges = new Set(),
     selectedNodeIds = [],
     nodeAverages = null,
     onMapClick,
-    voltageScale
+    voltageScale,
+    fitHighlightedNodesTrigger = 0
 }) => {
     const selectedNodeIdsSet = useMemo(() => new Set(selectedNodeIds), [selectedNodeIds]);
     const [mounted, setMounted] = useState(false);
@@ -89,6 +88,7 @@ export const GridMap = React.memo<GridMapProps>(({
     const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
     const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
     const [centered, setCentered] = useState(false);
+    const lastHandledTrigger = useRef(0);
 
     useEffect(() => {
         if (!centered && nodes.length > 0) {
@@ -98,6 +98,69 @@ export const GridMap = React.memo<GridMapProps>(({
             setCentered(true);
         }
     }, [nodes, centered]);
+
+    useEffect(() => {
+        if (fitHighlightedNodesTrigger > 0 && 
+            fitHighlightedNodesTrigger > lastHandledTrigger.current && 
+            highlightedNodes.size > 0 && 
+            dimensions.width > 0) {
+            
+            lastHandledTrigger.current = fitHighlightedNodesTrigger;
+            
+            const nodesToFit = nodes.filter(n => highlightedNodes.has(n.id));
+            if (nodesToFit.length === 0) return;
+
+            // Check if all highlighted nodes are already visible
+            const viewport = new WebMercatorViewport({
+                width: dimensions.width,
+                height: dimensions.height,
+                ...viewState
+            });
+
+            const allVisible = nodesToFit.every(n => {
+                const [x, y] = viewport.project(n.position);
+                // 10% padding check
+                const paddingX = dimensions.width * 0.1;
+                const paddingY = dimensions.height * 0.1;
+                return (
+                    x >= paddingX &&
+                    x <= dimensions.width - paddingX &&
+                    y >= paddingY &&
+                    y <= dimensions.height - paddingY
+                );
+            });
+
+            if (allVisible) {
+                console.log('[GridMap] All nodes already visible, skipping zoom transition');
+                return;
+            }
+
+            let minLon = Infinity, maxLon = -Infinity, minLat = Infinity, maxLat = -Infinity;
+            nodesToFit.forEach(n => {
+                const [lon, lat] = n.position;
+                minLon = Math.min(minLon, lon);
+                maxLon = Math.max(maxLon, lon);
+                minLat = Math.min(minLat, lat);
+                maxLat = Math.max(maxLat, lat);
+            });
+
+            const { longitude, latitude, zoom } = viewport.fitBounds(
+                [[minLon, minLat], [maxLon, maxLat]],
+                {
+                    padding: Math.min(dimensions.width, dimensions.height) * 0.1,
+                    maxZoom: 18
+                }
+            );
+
+            setViewState((prev: any) => ({
+                ...prev,
+                longitude,
+                latitude,
+                zoom,
+                transitionDuration: 1000
+            }));
+        }
+    }, [fitHighlightedNodesTrigger, highlightedNodes, nodes, dimensions]);
 
     useEffect(() => {
         setMounted(true);
@@ -352,20 +415,6 @@ export const GridMap = React.memo<GridMapProps>(({
     return (
         <div
             style={{ position: 'relative', width: '100vw', height: '100vh', minHeight: '500px', background: '#141517' }}
-            onContextMenu={(e) => {
-                e.preventDefault();
-                if (hoveredNodeId && onNodeRightClick) {
-                    const node = nodes.find(n => n.id === hoveredNodeId);
-                    if (node) {
-                        onNodeRightClick(node, e.clientX, e.clientY);
-                    }
-                } else if (hoveredEdgeId && onEdgeRightClick) {
-                    const edge = edges.find(ed => ed.id === hoveredEdgeId || `${ed.source}-${ed.target}` === hoveredEdgeId);
-                    if (edge) {
-                        onEdgeRightClick(edge, e.clientX, e.clientY);
-                    }
-                }
-            }}
         >
             {mounted && dimensions.width > 0 && dimensions.height > 0 && (
                 <DeckGL

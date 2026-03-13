@@ -15,6 +15,8 @@ interface Props {
     nodeName: string | undefined;
     degrees: number | null;
     onDegreesChange: (degrees: number | null) => void;
+    isMinimized?: boolean;
+    onMinimize?: () => void;
 }
 
 export const VoltageDistributionModal = memo(function VoltageDistributionModal({
@@ -27,7 +29,9 @@ export const VoltageDistributionModal = memo(function VoltageDistributionModal({
     estimatedRows,
     nodeName,
     degrees,
-    onDegreesChange
+    onDegreesChange,
+    isMinimized,
+    onMinimize,
 }: Props) {
     const [showFilters, setShowFilters] = useState<boolean>(false);
     const [rndState, setRndState] = useState(() => {
@@ -54,6 +58,8 @@ export const VoltageDistributionModal = memo(function VoltageDistributionModal({
     };
 
     if (!isOpen) return null;
+
+    if (isMinimized) return null;
 
     return (
         <Rnd
@@ -102,7 +108,12 @@ export const VoltageDistributionModal = memo(function VoltageDistributionModal({
                             >
                                 Filters
                             </Button>
-                            <ActionIcon variant="subtle" onClick={onClose}>
+                            {onMinimize && (
+                                <ActionIcon variant="subtle" onClick={onMinimize} title="Minimize">
+                                    <ChevronDown size={16} />
+                                </ActionIcon>
+                            )}
+                            <ActionIcon variant="subtle" onClick={onClose} title="Close">
                                 <X size={16} />
                             </ActionIcon>
                         </Group>

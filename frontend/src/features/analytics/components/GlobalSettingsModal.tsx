@@ -1,5 +1,5 @@
 import { Paper, Stack, Group, Text, NumberInput, SegmentedControl, Button, Divider, Alert, Box, ActionIcon, Title } from '@mantine/core';
-import { DateTimePicker } from '@mantine/dates';
+import { DatePickerInput } from '@mantine/dates';
 import { Settings, Info, X } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { Rnd } from 'react-rnd';
@@ -139,16 +139,16 @@ export function GlobalSettingsModal({ opened, onClose, config, onSave }: GlobalS
                                 value={localConfig.endDateType}
                                 onChange={(value) => setLocalConfig({ ...localConfig, endDateType: value as any })}
                                 data={[
-                                    { label: 'Current Time (Live)', value: 'now' },
+                                    { label: 'Current Date (Live)', value: 'now' },
                                     { label: 'Fixed Date', value: 'fixed' },
                                 ]}
                             />
                         </Stack>
 
                         {localConfig.endDateType === 'fixed' && (
-                            <DateTimePicker
+                            <DatePickerInput
                                 label="Fixed End Date"
-                                placeholder="Pick date and time"
+                                placeholder="Pick a date"
                                 value={localConfig.fixedEndDate ? new Date(localConfig.fixedEndDate) : new Date()}
                                 onChange={(date: any) => {
                                     if (date instanceof Date && !isNaN(date.getTime())) {
@@ -163,7 +163,7 @@ export function GlobalSettingsModal({ opened, onClose, config, onSave }: GlobalS
                             <Text size="xs">
                                 {localConfig.endDateType === 'now'
                                     ? 'Analysis will always look back from the current moment.'
-                                    : 'Analysis will be anchored to the specific time provided above.'}
+                                    : 'Analysis will be anchored to the specific date provided above.'}
                             </Text>
                         </Alert>
 

@@ -2,7 +2,7 @@
 
 ## 1. Data Architecture & Integration
 ### 1.1 Grid Model Consumption (The Graph)
-* **Connectivity Engine**: Must ingest the grid model (from Hexagon GIS/SnoSMART) and represent it as a directed graph.
+* **Connectivity Engine**: Must ingest the grid model and represent it as a directed graph.
 * **Hierarchical Relationship**: The system must map the following parent-child relationships: Substation Breaker → Primary Conductors → Fuses/Reclosers → Step-down Transformers → Branch Circuits → Meters (AMI).
 * **Phasing Attributes**: Each edge (conductor) and node (device) must carry phasing attributes (A, B, C, or combinations). The graph traversal must be phase-aware to calculate imbalances.
 

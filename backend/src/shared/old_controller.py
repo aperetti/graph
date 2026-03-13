@@ -1,7 +1,6 @@
 """API Controller for the Analytical Agent and Graph Queries."""
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.concurrency import run_in_threadpool
-from typing import Dict, Any, List
 
 from src.shared.duckdb_repository import DuckDBRepository
 from src.grid.networkx_engine import NetworkXEngine

@@ -2,8 +2,8 @@ import '@mantine/core/styles.css';
 import '@mantine/dates/styles.css';
 import { useState, useEffect, useCallback } from 'react';
 import { useMediaQuery } from '@mantine/hooks';
-import { MantineProvider, AppShell, Box, Stack, ActionIcon, Menu, Group, Tooltip, Paper, Text as MantineText } from '@mantine/core';
-import { Menu as MenuIcon, X, Search, Activity, Settings } from 'lucide-react';
+import { MantineProvider, AppShell, Box, Stack, ActionIcon, Menu, Group, Tooltip, Paper } from '@mantine/core';
+import { Menu as MenuIcon, X, Search, Activity, Settings, Zap } from 'lucide-react';
 
 import { GridMap } from './features/grid/components/GridMap';
 import { AnalysisToolbar } from './features/grid/components/AnalysisToolbar';
@@ -29,6 +29,27 @@ const DEFAULT_CONFIG: GlobalConfig = {
   endDateType: 'now',
   fixedEndDate: new Date().toISOString()
 };
+
+type AnalysisType = 'consumption' | 'voltage';
+
+interface AnalysisInstance {
+  id: string;
+  type: AnalysisType;
+  nodeIds: string[];
+  nodeName: string;
+  isOpen: boolean;
+  isMinimized: boolean;
+  loading: boolean;
+  data: any[];
+  estimatedRows?: number;
+  // Voltage specific
+  degrees?: number | null;
+  scatterData?: any[];
+  timeSeriesData?: any[];
+  // Large query handling
+  isPaused?: boolean;
+  pendingRequest?: { nodeIds: string[], start: string, end: string, degrees?: number | null };
+}
 
 const calculateRange = (config: GlobalConfig) => {
   const end = config.endDateType === 'now' ? new Date() : new Date(config.fixedEndDate);
@@ -96,25 +117,15 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [mapVoltageEstimatedRows, setMapVoltageEstimatedRows] = useState<number | undefined>();
 
-  const [consumptionModalOpen, setConsumptionModalOpen] = useState(false);
-  const [consumptionData, setConsumptionData] = useState<any[]>([]);
-  const [consumptionEstimatedRows, setConsumptionEstimatedRows] = useState<number | undefined>();
-  const [consumptionLoading, setConsumptionLoading] = useState(false);
+  const [analysisWindows, setAnalysisWindows] = useState<AnalysisInstance[]>([]);
 
-  const [voltageModalOpen, setVoltageModalOpen] = useState(false);
-  const [voltageData, setVoltageData] = useState<any[]>([]);
-  const [voltageScatterData, setVoltageScatterData] = useState<any[]>([]);
-  const [voltageLoading, setVoltageLoading] = useState(false);
-  const [voltageEstimatedRows, setVoltageEstimatedRows] = useState<number | undefined>();
-  const [voltageDegrees, setVoltageDegrees] = useState<number | null>(5);
-  const [voltageTimeSeries, setVoltageTimeSeries] = useState<any[]>([]);
-  const [consumptionPausedForLargeQuery, setConsumptionPausedForLargeQuery] = useState(false);
-  const [voltagePausedForLargeQuery, setVoltagePausedForLargeQuery] = useState(false);
-  const [pendingConsumptionRequest, setPendingConsumptionRequest] = useState<{ nodeIds: string[], start: string, end: string } | null>(null);
-  const [pendingVoltageRequest, setPendingVoltageRequest] = useState<{ nodeIds: string[], start: string, end: string, degrees: number | null } | null>(null);
+  const updateWindow = (id: string, updates: Partial<AnalysisInstance>) => {
+    setAnalysisWindows(prev => prev.map(w => w.id === id ? { ...w, ...updates } : w));
+  };
 
-  const [consumptionMinimized, setConsumptionMinimized] = useState(false);
-  const [voltageMinimized, setVoltageMinimized] = useState(false);
+  const removeWindow = (id: string) => {
+    setAnalysisWindows(prev => prev.filter(w => w.id !== id));
+  };
 
   const [highlightedNodes, setHighlightedNodes] = useState<Set<string>>(new Set());
   const [highlightedEdges, setHighlightedEdges] = useState<Set<string>>(new Set());
@@ -144,14 +155,6 @@ export default function App() {
   }, [voltageScale]);
 
 
-  const handleCloseConsumptionModal = useCallback(() => {
-    setConsumptionModalOpen(false);
-    setConsumptionMinimized(false);
-  }, []);
-  const handleCloseVoltageModal = useCallback(() => {
-    setVoltageModalOpen(false);
-    setVoltageMinimized(false);
-  }, []);
   const handleClearSelection = useCallback(() => setSelectedNodes([]), []);
   const isMobile = useMediaQuery('(max-width: 768px)');
 
@@ -222,7 +225,7 @@ export default function App() {
     }
   };
 
-  const performConsumptionFetch = async (nodeIds: string[], start: string, end: string) => {
+  const performConsumptionFetch = async (windowId: string, nodeIds: string[], start: string, end: string) => {
     try {
       const res = await fetchConsumption(nodeIds, start, end);
       if (res.downstream_node_ids) {
@@ -235,17 +238,18 @@ export default function App() {
       } else {
         setHighlightedEdges(new Set());
       }
-      if (res.time_series && res.time_series.length > 0) {
-        setConsumptionData(res.time_series);
-      }
-      if (res.estimated_rows !== undefined) {
-        setConsumptionEstimatedRows(res.estimated_rows);
-      }
+      
+      updateWindow(windowId, {
+        data: (res.time_series && res.time_series.length > 0) ? res.time_series : [],
+        estimatedRows: res.estimated_rows,
+        loading: false,
+        isMinimized: false
+      });
+
     } catch (err) {
       console.error('[App] Failed to fetch consumption:', err);
+      updateWindow(windowId, { loading: false });
     } finally {
-      setConsumptionLoading(false);
-      setConsumptionMinimized(false);
       setFitBoundsTrigger(prev => prev + 1);
     }
   };
@@ -254,6 +258,13 @@ export default function App() {
     const nodesToQuery = overrideNode ? [overrideNode] : selectedNodes;
     if (nodesToQuery.length === 0) return;
     if (overrideNode) setSelectedNodes([overrideNode]);
+
+    const nodeLabel = nodesToQuery.length > 1
+      ? `${nodesToQuery.length} Assets Aggregate`
+      : (nodesToQuery[0]?.name || nodesToQuery[0]?.id || '');
+
+    const nodeIds = nodesToQuery.map(n => n.id);
+    const windowId = `consumption-${nodeIds.join('-')}`;
 
     const range = calculateRange(globalConfig);
     let start = range.start;
@@ -274,44 +285,61 @@ export default function App() {
       setDateRange({ start, end });
     }
 
-    setVoltageModalOpen(false);
-    setConsumptionData([]);
-    setConsumptionEstimatedRows(undefined);
-    setNodeAverages(null);
-    setConsumptionLoading(true);
-    setConsumptionModalOpen(true);
-    setConsumptionPausedForLargeQuery(false);
-    setPendingConsumptionRequest(null);
+    // Minimize other consumption windows
+    setAnalysisWindows(prev => prev.map(w =>
+      (w.type === 'consumption' && w.id !== windowId)
+        ? { ...w, isMinimized: true }
+        : w
+    ));
 
-    const nodeIds = nodesToQuery.map(n => n.id);
+    const existing = analysisWindows.find(w => w.id === windowId);
+    if (existing) {
+      updateWindow(windowId, { isOpen: true, isMinimized: false });
+      return;
+    }
+
+    const newWindow: AnalysisInstance = {
+      id: windowId,
+      type: 'consumption',
+      nodeIds,
+      nodeName: nodeLabel,
+      isOpen: true,
+      isMinimized: false,
+      loading: true,
+      data: [],
+      isPaused: false,
+    };
+    setAnalysisWindows(prev => [...prev, newWindow]);
 
     try {
       const estRes = await fetchConsumptionEstimate(nodeIds, start, end);
-      setConsumptionEstimatedRows(estRes.estimated_rows);
+      updateWindow(windowId, { estimatedRows: estRes.estimated_rows });
 
       if (estRes.estimated_rows > 10000000) {
-        setConsumptionPausedForLargeQuery(true);
-        setPendingConsumptionRequest({ nodeIds, start, end });
+        updateWindow(windowId, {
+          isPaused: true,
+          pendingRequest: { nodeIds, start, end },
+          loading: false
+        });
         return;
       }
 
-      await performConsumptionFetch(nodeIds, start, end);
+      await performConsumptionFetch(windowId, nodeIds, start, end);
     } catch (err) {
       console.error('[App] Consumption safety check failed:', err);
-      setConsumptionLoading(false);
+      updateWindow(windowId, { loading: false });
     }
   };
 
-  const handleConfirmConsumption = async () => {
-    if (!pendingConsumptionRequest) return;
-    setConsumptionPausedForLargeQuery(false);
-    setConsumptionLoading(true);
-    const { nodeIds, start, end } = pendingConsumptionRequest;
-    await performConsumptionFetch(nodeIds, start, end);
-    setPendingConsumptionRequest(null);
+  const handleConfirmConsumption = async (windowId: string) => {
+    const win = analysisWindows.find(w => w.id === windowId);
+    if (!win || !win.pendingRequest) return;
+    updateWindow(windowId, { isPaused: false, loading: true });
+    const { nodeIds, start, end } = win.pendingRequest;
+    await performConsumptionFetch(windowId, nodeIds, start, end);
   };
 
-  const performVoltageFetch = async (nodeIds: string[], start: string, end: string, degreesToUse: number | null) => {
+  const performVoltageFetch = async (windowId: string, nodeIds: string[], start: string, end: string, degreesToUse: number | null) => {
     try {
       const res = await fetchVoltageDistribution(nodeIds, start, end, degreesToUse === null ? undefined : degreesToUse);
       if (res.downstream_node_ids) {
@@ -324,17 +352,18 @@ export default function App() {
       } else {
         setHighlightedEdges(new Set());
       }
-      if (res.distribution) {
-        setVoltageData(res.distribution.map((d: any) => ({
-          voltage: d.voltage.toString() + 'V',
-          a: d.phase_a,
-          b: d.phase_b,
-          c: d.phase_c,
-        })));
-      }
+      
+      const distribution = res.distribution ? res.distribution.map((d: any) => ({
+        voltage: d.voltage.toString() + 'V',
+        a: d.phase_a,
+        b: d.phase_b,
+        c: d.phase_c,
+      })) : [];
+
+      let scatterData: any[] = [];
       if (res.scatter) {
         const maxCount = Math.max(...res.scatter.map((d: any) => d.count || 1), 1);
-        setVoltageScatterData([
+        scatterData = [
           {
             color: 'cyan.6',
             name: 'Voltage vs Loading Density',
@@ -345,22 +374,26 @@ export default function App() {
               maxCount: maxCount
             }))
           }
-        ]);
+        ];
       }
+
       if (res.node_averages) {
         setNodeAverages(res.node_averages);
       }
-      if (res.timeseries) {
-        setVoltageTimeSeries(res.timeseries);
-      }
-      if (res.estimated_rows !== undefined) {
-        setVoltageEstimatedRows(res.estimated_rows);
-      }
+
+      updateWindow(windowId, {
+        data: distribution,
+        scatterData,
+        timeSeriesData: res.timeseries || [],
+        estimatedRows: res.estimated_rows,
+        loading: false,
+        isMinimized: false
+      });
+
     } catch (err) {
       console.error('[App] Failed to fetch voltage distribution:', err);
+      updateWindow(windowId, { loading: false });
     } finally {
-      setVoltageLoading(false);
-      setVoltageMinimized(false);
       setFitBoundsTrigger(prev => prev + 1);
     }
   };
@@ -371,6 +404,8 @@ export default function App() {
     if (overrideNode) setSelectedNodes([overrideNode]);
 
     const nodeIds = nodesToQuery.map(n => n.id);
+    const nodeLabel = nodesToQuery[0]?.name || nodesToQuery[0]?.id || '';
+    const windowId = `voltage-${nodeIds.join('-')}`;
 
     const range = calculateRange(globalConfig);
     let start = range.start;
@@ -391,43 +426,68 @@ export default function App() {
       setDateRange({ start, end });
     }
 
-    setConsumptionModalOpen(false);
-    setVoltageData([]);
-    setVoltageScatterData([]);
-    setVoltageEstimatedRows(undefined);
-    setNodeAverages(null);
-    setVoltageLoading(true);
-    setVoltageModalOpen(true);
-    setVoltagePausedForLargeQuery(false);
-    setPendingVoltageRequest(null);
+    // Minimize other voltage windows
+    setAnalysisWindows(prev => prev.map(w =>
+      (w.type === 'voltage' && w.id !== windowId)
+        ? { ...w, isMinimized: true }
+        : w
+    ));
 
-    const degreesToUse = degrees !== undefined ? degrees : voltageDegrees;
-    setVoltageDegrees(degreesToUse);
+    const existing = analysisWindows.find(w => w.id === windowId);
+    const currentDegrees = existing?.degrees ?? 5;
+    const degreesToUse = degrees !== undefined ? degrees : currentDegrees;
+
+    if (existing && degrees === undefined) {
+      updateWindow(windowId, { isOpen: true, isMinimized: false });
+      return;
+    }
+
+    if (existing) {
+        updateWindow(windowId, { loading: true, degrees: degreesToUse, isMinimized: false, isOpen: true });
+    } else {
+        const newWindow: AnalysisInstance = {
+            id: windowId,
+            type: 'voltage',
+            nodeIds,
+            nodeName: nodeLabel,
+            isOpen: true,
+            isMinimized: false,
+            loading: true,
+            data: [],
+            degrees: degreesToUse,
+            isPaused: false,
+        };
+        setAnalysisWindows(prev => [...prev, newWindow]);
+    }
+
+    setNodeAverages(null);
 
     try {
       const estRes = await fetchVoltageEstimate(nodeIds, start, end, degreesToUse === null ? undefined : degreesToUse);
-      setVoltageEstimatedRows(estRes.estimated_rows);
+      updateWindow(windowId, { estimatedRows: estRes.estimated_rows });
 
       if (estRes.estimated_rows > 10000000) {
-        setVoltagePausedForLargeQuery(true);
-        setPendingVoltageRequest({ nodeIds, start, end, degrees: degreesToUse });
+        updateWindow(windowId, {
+          isPaused: true,
+          pendingRequest: { nodeIds, start, end, degrees: degreesToUse },
+          loading: false
+        });
         return;
       }
 
-      await performVoltageFetch(nodeIds, start, end, degreesToUse);
+      await performVoltageFetch(windowId, nodeIds, start, end, degreesToUse);
     } catch (err) {
       console.error('[App] Voltage safety check failed:', err);
-      setVoltageLoading(false);
+      updateWindow(windowId, { loading: false });
     }
   };
 
-  const handleConfirmVoltage = async () => {
-    if (!pendingVoltageRequest) return;
-    setVoltagePausedForLargeQuery(false);
-    setVoltageLoading(true);
-    const { nodeIds, start, end, degrees } = pendingVoltageRequest;
-    await performVoltageFetch(nodeIds, start, end, degrees);
-    setPendingVoltageRequest(null);
+  const handleConfirmVoltage = async (windowId: string) => {
+    const win = analysisWindows.find(w => w.id === windowId);
+    if (!win || !win.pendingRequest) return;
+    updateWindow(windowId, { isPaused: false, loading: true });
+    const { nodeIds, start, end, degrees } = win.pendingRequest;
+    await performVoltageFetch(windowId, nodeIds, start, end, degrees!);
   };
 
   return (
@@ -585,72 +645,80 @@ export default function App() {
           )}
 
           {/* Full Width Bottom Modals */}
-          <ConsumptionTimeSeriesModal
-            isOpen={consumptionModalOpen}
-            onClose={handleCloseConsumptionModal}
-            loading={consumptionLoading}
-            data={consumptionData}
-            estimatedRows={consumptionEstimatedRows}
-            nodeName={selectedNodes.length > 1 ? `${selectedNodes.length} Assets Aggregate` : (selectedNodes[0]?.name || selectedNodes[0]?.id)}
-            isMinimized={consumptionMinimized}
-            onMinimize={() => setConsumptionMinimized(true)}
-            isPaused={consumptionPausedForLargeQuery}
-            onConfirm={handleConfirmConsumption}
-          />
-
-          <VoltageDistributionModal
-            isOpen={voltageModalOpen}
-            onClose={handleCloseVoltageModal}
-            loading={voltageLoading}
-            data={voltageData}
-            scatterData={voltageScatterData}
-            timeSeriesData={voltageTimeSeries}
-            estimatedRows={voltageEstimatedRows}
-            nodeName={selectedNodes[0]?.name}
-            degrees={voltageDegrees}
-            onDegreesChange={(d: number | null) => handleShowVoltageDistribution(undefined, undefined, d)}
-            isMinimized={voltageMinimized}
-            onMinimize={() => setVoltageMinimized(true)}
-            isPaused={voltagePausedForLargeQuery}
-            onConfirm={handleConfirmVoltage}
-          />
+          {analysisWindows.map(win => (
+            win.type === 'consumption' ? (
+              <ConsumptionTimeSeriesModal
+                key={win.id}
+                isOpen={win.isOpen}
+                onClose={() => removeWindow(win.id)}
+                loading={win.loading}
+                data={win.data}
+                estimatedRows={win.estimatedRows}
+                nodeName={win.nodeName}
+                isMinimized={win.isMinimized}
+                onMinimize={() => updateWindow(win.id, { isMinimized: true })}
+                isPaused={win.isPaused ?? false}
+                onConfirm={() => handleConfirmConsumption(win.id)}
+              />
+            ) : (
+              <VoltageDistributionModal
+                key={win.id}
+                isOpen={win.isOpen}
+                onClose={() => removeWindow(win.id)}
+                loading={win.loading}
+                data={win.data}
+                scatterData={win.scatterData || []}
+                timeSeriesData={win.timeSeriesData || []}
+                estimatedRows={win.estimatedRows}
+                nodeName={win.nodeName}
+                degrees={win.degrees ?? 5}
+                onDegreesChange={(d: number | null) => handleShowVoltageDistribution(undefined, undefined, d)}
+                isMinimized={win.isMinimized}
+                onMinimize={() => updateWindow(win.id, { isMinimized: true })}
+                isPaused={win.isPaused ?? false}
+                onConfirm={() => handleConfirmVoltage(win.id)}
+              />
+            )
+          ))}
 
           {/* Minimized Modal Tabs */}
-          <Box style={{ position: 'absolute', bottom: 20, left: 20, zIndex: 110, display: 'flex', gap: '10px' }}>
-            {consumptionModalOpen && consumptionMinimized && (
-              <Paper 
-                withBorder 
-                px="md" 
-                py="xs" 
-                onClick={() => setConsumptionMinimized(false)}
-                style={{ cursor: 'pointer', background: 'rgba(26, 27, 30, 0.95)', backdropFilter: 'blur(10px)' }}
+          <Box style={{ position: 'absolute', bottom: 20, left: 20, zIndex: 110, display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+            {analysisWindows.filter(w => w.isOpen && w.isMinimized).map(win => (
+              <Paper
+                key={win.id}
+                withBorder
+                px="sm"
+                py="xs"
+                style={{
+                  cursor: 'pointer',
+                  background: 'rgba(26, 27, 30, 0.95)',
+                  backdropFilter: 'blur(10px)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                  border: '1px solid rgba(255,255,255,0.1)'
+                }}
+                onClick={() => updateWindow(win.id, { isMinimized: false })}
               >
-                <Group gap="xs">
-                  <Activity size={16} color="#339af0" />
-                  <MantineText size="sm" fw={500}>Consumption: {selectedNodes[0]?.name || selectedNodes[0]?.id}</MantineText>
-                  <ActionIcon size="xs" variant="subtle" onClick={(e) => { e.stopPropagation(); handleCloseConsumptionModal(); }}>
+                <Group gap="xs" wrap="nowrap">
+                  {win.type === 'consumption' ? <Zap size={14} color="#339af0" /> : <Activity size={14} color="#fab005" />}
+                  <Box style={{ fontSize: '12px', fontWeight: 500 }}>
+                    {win.nodeName} ({win.type.charAt(0).toUpperCase() + win.type.slice(1)})
+                  </Box>
+                  <ActionIcon
+                    size="xs"
+                    variant="subtle"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      removeWindow(win.id);
+                    }}
+                  >
                     <X size={12} />
                   </ActionIcon>
                 </Group>
               </Paper>
-            )}
-            {voltageModalOpen && voltageMinimized && (
-              <Paper 
-                withBorder 
-                px="md" 
-                py="xs" 
-                onClick={() => setVoltageMinimized(false)}
-                style={{ cursor: 'pointer', background: 'rgba(26, 27, 30, 0.95)', backdropFilter: 'blur(10px)' }}
-              >
-                <Group gap="xs">
-                  <Activity size={16} color="#fab005" />
-                  <MantineText size="sm" fw={500}>Voltage: {selectedNodes[0]?.name}</MantineText>
-                  <ActionIcon size="xs" variant="subtle" onClick={(e) => { e.stopPropagation(); handleCloseVoltageModal(); }}>
-                    <X size={12} />
-                  </ActionIcon>
-                </Group>
-              </Paper>
-            )}
+            ))}
           </Box>
 
         </AppShell.Main>

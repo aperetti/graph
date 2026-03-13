@@ -1,26 +1,43 @@
 # Grid Analysis Guide
 
-This guide explains how to interact with the interactive grid map and run various analytical use cases.
+This guide explains how to interact with the interactive grid map and use Griddy's analytical tools to explore energy consumption and voltage behavior across your distribution network.
 
-## Interacting with the Grid
+## Selecting an Asset
 
-- **Zoom & Pan**: Use your mouse or trackpad to navigate the 12,000+ node model.
-- **Node Selection**: Click on any node (Substation, Transformer, Meter, or Switch) to see its details.
-- **Context Menu**: Right-click on a node to access analysis shortcuts:
-  - **Trace Downstream**: Highlights all assets logically "below" this node in the grid hierarchy.
-  - **Trace Upstream**: Traces the path back to the Substation.
-  - **Run Voltage Analysis**: Opens the detailed voltage distribution panel.
-  - **Run Phase Balance**: Analyzes current and energy imbalance across phases.
+Click on any node on the map to select it. Selected nodes turn **blue** and highlight their connected network. The **Analytics Toolbar** appears in the top-right corner showing the selected asset count, date range, and two analysis icons.
+
+![Node selected on the grid map with the analytics toolbar visible](/img/guide/grid-map-node-selected.png)
+
+The toolbar provides:
+- **Asset count badge** — shows how many nodes are selected (multi-select with Shift+Click)
+- **Date range** — the time window used for all analyses (configurable via the settings panel)
+- **Consumption icon** (bar chart) — opens the Consumption Time Series analysis
+- **Voltage icon** (√x) — opens the Voltage Distribution analysis
+- **Clear selection** (✕) — deselects all nodes
 
 ## Available Analysis Types
 
-1. [**Voltage Analysis**](./voltage-analysis.md): Statistical distribution of voltage readings over time.
-2. [**Phase Balance (Load Flow)**](./load-flow.md): Comparison of loading across Phase A, B, and C.
-3. [**Voltage Map (Heatmap)**](./voltage-map.md): System-wide visualization of voltage health.
+1. [**Consumption Time Series**](./consumption-analysis) — Energy delivery patterns, daily load profiles, and weather correlation
+2. [**Voltage Distribution**](./voltage-analysis) — Statistical voltage behavior, daily stability trends, and load-voltage relationships
+3. [**Voltage Map (Heatmap)**](./voltage-map) — System-wide visualization of voltage health across the network
+
+## Multi-Window Support
+
+Multiple analysis windows can be open **simultaneously**. Open a consumption analysis for one transformer, then select a different asset and open its voltage analysis — both windows remain independent.
+
+Each window can be:
+- **Dragged** by its title bar to any position on screen
+- **Resized** from any edge or corner
+- **Minimized** to a tab at the bottom of the screen
+- **Closed** without affecting other open windows
+
+Minimized windows retain all their data and context, even after you click away and deselect the original node on the map.
+
+![Two analysis windows open simultaneously — consumption minimized as a tab while voltage is active](/img/guide/multi-window.png)
 
 ## Degrees of Separation
 
-Most analysis types allow you to specify **Degrees of Separation**. This controls how "deep" the search goes:
+Most analysis types allow you to specify **Degrees of Separation** via the Filters menu. This controls how "deep" the search goes from the selected node:
 - **0 Degrees**: Only analyzes the selected node.
-- **5 Degrees (Default)**: Analyzes the node and its immediate neighbors up to 5 steps away.
+- **5 Degrees (Default)**: Analyzes the node and its neighbors up to 5 steps away.
 - **Full Trace (null)**: Analyzes the entire downstream tree from the selected point.

@@ -5,10 +5,12 @@ The Voltage Map provides a system-wide view of grid health by coloring every nod
 ## Using the Map
 
 - **Toggle**: Access the **Voltage Map** from the analytics sidebar.
+- **Date**: Select a single day to summarize. The map shows aggregated voltage data for the chosen 24-hour period.
 - **Aggregation**: Choose how to summarize the data:
   - **Min**: Highlights the worst-case voltage drops.
   - **Max**: Highlights potential over-voltage issues.
   - **Median**: Shows the typical operating condition.
+  - **Mean**: Shows the average voltage for the selected day.
 - **Trace Filter**: Optional. Enter a node ID to only map the subset of nodes downstream of that point.
 
 ## Color Coding (pu)

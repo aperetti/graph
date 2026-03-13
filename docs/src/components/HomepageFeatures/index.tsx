@@ -3,16 +3,21 @@ import clsx from 'clsx';
 import Heading from '@theme/Heading';
 import styles from './styles.module.css';
 
+import AmiInsightsAnimation from './AmiInsightsAnimation';
+import FutureGridAnimation from './FutureGridAnimation';
+import ScrollingNumbersAnimation from './ScrollingNumbersAnimation';
+
 type FeatureItem = {
   title: string;
-  img: string;
+  img?: string;
+  Animation?: React.FC;
   description: ReactNode;
 };
 
 const FeatureList: FeatureItem[] = [
   {
     title: 'AMI Insights',
-    img: '/img/ami_insights_v3.png',
+    Animation: AmiInsightsAnimation,
     description: (
       <>
         Unlock actionable grid patterns with high-resolution meter data.
@@ -21,7 +26,7 @@ const FeatureList: FeatureItem[] = [
   },
   {
     title: 'Plan the Future Grid',
-    img: '/img/plan_future_grid_v3.png',
+    Animation: FutureGridAnimation,
     description: (
       <>
         Predict and prepare for dynamic grid evolution today.
@@ -30,7 +35,7 @@ const FeatureList: FeatureItem[] = [
   },
   {
     title: 'Data at Scale',
-    img: '/img/data_at_scale_v3.png',
+    Animation: ScrollingNumbersAnimation,
     description: (
       <>
         Analyze millions of data points in real-time.
@@ -39,11 +44,17 @@ const FeatureList: FeatureItem[] = [
   },
 ];
 
-function Feature({ title, img, description }: FeatureItem) {
+function Feature({ title, img, Animation, description }: FeatureItem) {
   return (
     <div className={clsx('col col--4')}>
       <div className="text--center">
-        <img src={img} className={styles.featureSvg} alt={title} />
+        {Animation ? (
+          <div className={styles.animationContainer}>
+            <Animation />
+          </div>
+        ) : (
+          <img src={img} className={styles.featureSvg} alt={title} />
+        )}
       </div>
       <div className="text--center padding-horiz--md">
         <Heading as="h3">{title}</Heading>

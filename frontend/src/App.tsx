@@ -5,7 +5,6 @@ import { MantineProvider, AppShell, Box, Stack, ActionIcon, Menu, Group, Tooltip
 import { Menu as MenuIcon, X, Search, Activity, Settings } from 'lucide-react';
 
 import { GridMap } from './features/grid/components/GridMap';
-import { GridExplorerPanel } from './features/grid/components/GridExplorerPanel';
 import { AnalysisToolbar } from './features/grid/components/AnalysisToolbar';
 import { GridContextMenu } from './features/grid/components/GridContextMenu';
 import { AnalyticsPanel } from './features/analytics/components/AnalyticsPanel';
@@ -93,7 +92,7 @@ export default function App() {
     }
   }, [globalConfig]);
 
-  const [activeSidePanel, setActiveSidePanel] = useState<'none' | 'explorer' | 'analytics'>('none');
+  const [activeSidePanel, setActiveSidePanel] = useState<'none' | 'analytics'>('none');
   const [loading, setLoading] = useState(false);
   const [mapVoltageEstimatedRows, setMapVoltageEstimatedRows] = useState<number | undefined>();
 
@@ -459,15 +458,6 @@ export default function App() {
                 </Menu.Target>
 
                 <Menu.Dropdown bg="rgba(26, 27, 30, 0.95)" style={{ backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.1)' }}>
-                  <Menu.Label>Asset Management</Menu.Label>
-                  <Menu.Item
-                    leftSection={<Search size={16} />}
-                    onClick={() => setActiveSidePanel(p => p === 'explorer' ? 'none' : 'explorer')}
-                    bg={activeSidePanel === 'explorer' ? 'rgba(51, 154, 240, 0.2)' : undefined}
-                  >
-                    Grid Explorer
-                  </Menu.Item>
-
                   <Menu.Label>System Analytics</Menu.Label>
                   <Menu.Item
                     leftSection={<Settings size={16} />}
@@ -483,6 +473,14 @@ export default function App() {
                     bg={activeSidePanel === 'analytics' ? 'rgba(51, 154, 240, 0.2)' : undefined}
                   >
                     Voltage Map Settings
+                  </Menu.Item>
+
+                  <Menu.Label>Resources</Menu.Label>
+                  <Menu.Item
+                    leftSection={<Search size={16} />}
+                    onClick={() => window.open('/docs/', '_blank')}
+                  >
+                    Documentation
                   </Menu.Item>
 
                   <Menu.Divider />
@@ -504,17 +502,6 @@ export default function App() {
               w={{ base: 'calc(100vw - 40px)', sm: 400 }}
             >
               <Stack gap="16px">
-                {activeSidePanel === 'explorer' && (
-                  <div style={{ pointerEvents: 'auto' }}>
-                    <GridExplorerPanel
-                      nodeCount={nodes.filter(n => n.type === 'Meter').length}
-                      selectedNodes={selectedNodes}
-                      onClearSelection={handleClearSelection}
-                      onViewConsumption={() => handleShowConsumption()}
-                      onViewVoltage={() => handleShowVoltageDistribution()}
-                    />
-                  </div>
-                )}
 
                 {activeSidePanel === 'analytics' && (
                   <div style={{ pointerEvents: 'auto' }}>

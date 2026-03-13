@@ -6,25 +6,87 @@
 
 /* You can override the default Infima variables here. */
 :root {
-  --ifm-color-primary: #4f46e5;
-  --ifm-color-primary-dark: #4338ca;
-  --ifm-color-primary-darker: #3730a3;
-  --ifm-color-primary-darkest: #312e81;
-  --ifm-color-primary-light: #6366f1;
-  --ifm-color-primary-lighter: #818cf8;
-  --ifm-color-primary-lightest: #a5b4fc;
+  --ifm-color-primary: #1e293b;
+  --ifm-color-primary-dark: #0f172a;
+  --ifm-color-primary-darker: #020617;
+  --ifm-color-primary-darkest: #000000;
+  --ifm-color-primary-light: #334155;
+  --ifm-color-primary-lighter: #475569;
+  --ifm-color-primary-lightest: #64748b;
   --ifm-code-font-size: 95%;
   --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.1);
+  --griddy-integrated-bg: #f8fafc;
+  --ifm-footer-background-color: var(--griddy-integrated-bg);
+  --ifm-navbar-background-color: var(--griddy-integrated-bg);
+  --ifm-hero-background-color: var(--griddy-integrated-bg);
+  --ifm-hero-text-color: #0f172a;
+  --ifm-background-color: var(--griddy-integrated-bg);
+  --griddy-hero-grid-opacity: 0.05;
 }
 
 /* For readability concerns, you should choose a lighter palette in dark mode. */
 [data-theme='dark'] {
-  --ifm-color-primary: #818cf8;
-  --ifm-color-primary-dark: #6366f1;
-  --ifm-color-primary-darker: #4f46e5;
-  --ifm-color-primary-darkest: #3730a3;
-  --ifm-color-primary-light: #a5b4fc;
-  --ifm-color-primary-lighter: #c7d2fe;
-  --ifm-color-primary-lightest: #e0e7ff;
+  --ifm-color-primary: #94a3b8;
+  --ifm-color-primary-dark: #64748b;
+  --ifm-color-primary-darker: #475569;
+  --ifm-color-primary-darkest: #334155;
+  --ifm-color-primary-light: #cbd5e1;
+  --ifm-color-primary-lighter: #e2e8f0;
+  --ifm-color-primary-lightest: #f1f5f9;
   --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
+  --griddy-integrated-bg: #0f172a;
+  --ifm-footer-background-color: var(--griddy-integrated-bg);
+  --ifm-navbar-background-color: var(--griddy-integrated-bg);
+  --ifm-hero-background-color: var(--griddy-integrated-bg);
+  --ifm-hero-text-color: #f8fafc;
+  --ifm-background-color: var(--griddy-integrated-bg);
+  --griddy-hero-grid-opacity: 0.02;
+  --ifm-font-color-base: #f1f5f9;
+  --ifm-heading-color: #f8fafc;
+}
+
+/* Specific component overrides for full integration */
+.navbar,
+.footer,
+.hero,
+.hero--primary,
+.pagination-nav__link,
+main {
+  background: var(--griddy-integrated-bg) !important;
+  background-color: var(--griddy-integrated-bg) !important;
+}
+
+.hero--primary {
+  padding: 8rem 0;
+}
+
+[data-theme='light'] .hero__title,
+[data-theme='light'] .hero__subtitle {
+  color: #0f172a !important;
+}
+
+[data-theme='dark'] .hero__title,
+[data-theme='dark'] .hero__subtitle {
+  color: #f8fafc !important;
+}
+
+.hero__title {
+  font-size: 5rem;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  margin-bottom: 1.5rem;
+  line-height: 1.1;
+}
+
+.hero__subtitle {
+  font-size: 1.25rem;
+  font-weight: 400;
+  opacity: 0.8 !important;
+  max-width: 600px;
+  margin: 0 auto 3rem auto;
+}
+
+.footer {
+  border-top: none;
+  margin-top: 0;
 }

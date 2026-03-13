@@ -22,8 +22,8 @@ const config: Config = {
 
   // GitHub pages deployment config.
   // If you aren't using GitHub pages, you don't need these.
-  organizationName: 'facebook', // Usually your GitHub org/user name.
-  projectName: 'docusaurus', // Usually your repo name.
+  organizationName: 'aperetti', // Usually your GitHub org/user name.
+  projectName: 'graph', // Usually your repo name.
 
   onBrokenLinks: 'throw',
 
@@ -81,14 +81,14 @@ const config: Config = {
           target: '_self',
         },
         {
-          href: 'https://github.com/facebook/docusaurus',
+          href: 'https://github.com/aperetti/graph',
           label: 'GitHub',
           position: 'right',
         },
       ],
     },
     footer: {
-      style: 'dark',
+      style: undefined,
       links: [
         {
           title: 'Docs',
@@ -103,16 +103,8 @@ const config: Config = {
           title: 'Community',
           items: [
             {
-              label: 'Stack Overflow',
-              href: 'https://stackoverflow.com/questions/tagged/docusaurus',
-            },
-            {
-              label: 'Discord',
-              href: 'https://discordapp.com/invite/docusaurus',
-            },
-            {
-              label: 'X',
-              href: 'https://x.com/docusaurus',
+              label: 'Coming Soon',
+              to: '#',
             },
           ],
         },
@@ -121,12 +113,12 @@ const config: Config = {
           items: [
             {
               label: 'GitHub',
-              href: 'https://github.com/facebook/docusaurus',
+              href: 'https://github.com/aperetti/graph',
             },
           ],
         },
       ],
-      copyright: `Copyright © ${new Date().getFullYear()} My Project, Inc. Built with Docusaurus.`,
+      copyright: `Copyright © ${new Date().getFullYear()} Griddy. Built with Docusaurus.`,
     },
     prism: {
       theme: prismThemes.github,

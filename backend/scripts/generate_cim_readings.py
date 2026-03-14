@@ -3,11 +3,15 @@ Generate realistic 15-minute interval readings for all real CIM nodes.
 
 Writes one parquet file per month to cim_readings/.
 ~4876 nodes × 96 intervals/day × 30 days ≈ 14 M rows/month.
-We generate 1 month (Jan 2025) at 15-min resolution by default.
-~14M rows — chunked monthly for performance.
+We generate from Jan 2025 through next month at 15-min resolution.
+
+Phase-aware generation:
+- Uses CimModelManager to get accurate per-node phase assignments
+- Single-phase nodes (A, B, or C) only produce voltage/current on their phase
+- Split-phase nodes (S1/S2) produce voltage_a, voltage_b at ~120 V each
+- Three-phase nodes produce all three phases
 """
 import duckdb
-import sqlite3
 import json
 import os
 import sys
@@ -15,29 +19,31 @@ import time
 from pathlib import Path
 
 SCRIPT_PATH = Path(__file__).resolve()
+BACKEND_DIR = SCRIPT_PATH.parents[1]
 WORKSPACE_ROOT = SCRIPT_PATH.parents[2]
 
-# Topology lives in SQLite; analytics engine + weather stay in DuckDB.
-SQLITE_PATH = os.getenv("TOPOLOGY_DB_PATH", str(WORKSPACE_ROOT / "grid_topology.sqlite"))
+# Ensure backend/ is importable for CimModelManager
+if str(BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIR))
+
 DB_PATH = os.getenv("DB_PATH", str(WORKSPACE_ROOT / "grid_data_cim.duckdb"))
 PARQUET_DIR = os.getenv("PARQUET_DIR", str(WORKSPACE_ROOT / "cim_readings"))
 
 
-def _load_topology_into_duckdb(conn, sqlite_path: str):
-    """Read topology from SQLite and push into DuckDB temp tables for the
-    analytics query which needs DuckDB array functions (list_contains, etc.)."""
-    sq = sqlite3.connect(sqlite_path)
-    node_rows = sq.execute(
-        "SELECT node_id, node_type, phases_present FROM grid_nodes"
-    ).fetchall()
-    edge_rows = sq.execute(
-        "SELECT from_node_id, to_node_id FROM grid_edges"
-    ).fetchall()
-    sub_rows = sq.execute(
-        "SELECT node_id, latitude, longitude FROM grid_nodes WHERE node_type = 'Substation'"
-    ).fetchall()
-    all_node_ids = sq.execute("SELECT node_id FROM grid_nodes").fetchall()
-    sq.close()
+def _load_topology_into_duckdb(conn):
+    """Load topology from CimModelManager into DuckDB temp tables.
+
+    Uses the CIM model's accurate per-node phase assignments derived from
+    ACLineSegmentPhase, EnergyConsumerPhase, etc.
+    """
+    from src.shared.cim_model import CimModelManager
+
+    print("Loading CIM model via CimModelManager...")
+    manager = CimModelManager.get_instance()
+    manager.load()
+
+    nodes_raw = manager.get_topology_nodes()
+    edges_raw = manager.get_topology_edges()
 
     # Create grid_nodes in DuckDB with proper VARCHAR[] array type
     conn.execute("DROP TABLE IF EXISTS grid_nodes")
@@ -46,22 +52,37 @@ def _load_topology_into_duckdb(conn, sqlite_path: str):
         "(node_id VARCHAR PRIMARY KEY, node_type VARCHAR, phases_present VARCHAR[])"
     )
     parsed = []
-    for r in node_rows:
-        phases = json.loads(r[2]) if r[2] else ['A', 'B', 'C']
-        parsed.append((r[0], r[1], phases))
+    for n in nodes_raw:
+        phases = n.get("phases_present", ["A", "B", "C"])
+        parsed.append((n["node_id"], n["node_type"], phases))
     conn.executemany("INSERT INTO grid_nodes VALUES (?, ?, ?)", parsed)
 
-    return node_rows, edge_rows, sub_rows, all_node_ids
+    # Edge connectivity for distance calculation
+    edge_rows = [(e["from_node_id"], e["to_node_id"]) for e in edges_raw]
+
+    # Substation info for distance calculation
+    sub_rows = [
+        (n["node_id"], n.get("latitude", 0.0), n.get("longitude", 0.0))
+        for n in nodes_raw if n["node_type"] == "Substation"
+    ]
+
+    all_node_ids = [(n["node_id"],) for n in nodes_raw]
+
+    # Log phase distribution
+    from collections import Counter
+    phase_counter = Counter()
+    for n in nodes_raw:
+        key = ",".join(sorted(n.get("phases_present", ["A", "B", "C"])))
+        phase_counter[key] += 1
+    print("  Phase distribution in topology:")
+    for phases, count in phase_counter.most_common():
+        print(f"    {phases:20s} {count}")
+
+    return nodes_raw, edge_rows, sub_rows, all_node_ids
 
 def main():
-    print(f"Using topology DB (SQLite): {SQLITE_PATH}")
     print(f"Using analytics DB (DuckDB): {DB_PATH}")
     print(f"Output parquet dir: {PARQUET_DIR}")
-
-    if not os.path.exists(SQLITE_PATH):
-        print(f"ERROR: Cannot find topology DB at {SQLITE_PATH}.", file=sys.stderr)
-        print("Tip: run backend/scripts/ingest_cim_graph.py first (or set TOPOLOGY_DB_PATH).", file=sys.stderr)
-        sys.exit(1)
 
     if os.path.exists(PARQUET_DIR):
         print(f"Cleaning existing parquet files in {PARQUET_DIR}...")
@@ -71,11 +92,11 @@ def main():
     else:
         os.makedirs(PARQUET_DIR, exist_ok=True)
 
-    print("Loading topology from SQLite into DuckDB analytics engine...")
+    print("Loading topology from CIM model into DuckDB analytics engine...")
     with duckdb.connect(DB_PATH) as conn:
-        node_rows, edge_rows, sub_rows, all_node_ids = _load_topology_into_duckdb(conn, SQLITE_PATH)
+        nodes_raw, edge_rows, sub_rows, all_node_ids = _load_topology_into_duckdb(conn)
 
-        n = len(node_rows)
+        n = len(nodes_raw)
         print(f"Found {n} nodes in topology.")
         if n == 0:
             print("ERROR: No nodes found. Run ingest_cim_graph.py first.", file=sys.stderr)
@@ -88,8 +109,7 @@ def main():
         G.add_edges_from(edge_rows)
 
         node_distances = {}
-        for sub_row in sub_rows:
-            sub_id, sub_lat, sub_lon = sub_row[0], sub_row[1], sub_row[2]
+        for sub_id, sub_lat, sub_lon in sub_rows:
             if sub_id in G:
                 root_id = sub_id
             else:
@@ -115,9 +135,9 @@ def main():
         conn.execute("CREATE TABLE node_distances (node_id VARCHAR, distance DOUBLE, distance_pct DOUBLE)")
         dist_rows = [(n_id, float(d), float(d)/max_dist) for n_id, d in node_distances.items()]
         
-        # Some Isolated nodes might not be in G, give them max_dist
-        for node_row in all_node_ids:
-            n_id = node_row[0]
+        # Some isolated nodes might not be in G, give them max_dist
+        for node_tuple in all_node_ids:
+            n_id = node_tuple[0]
             if n_id not in node_distances:
                 dist_rows.append((n_id, float(max_dist), 1.0))
 
@@ -162,11 +182,40 @@ def main():
             chunk_start = time.time()
 
             # Use range(0, N) intervals from epoch to avoid DuckDB generate_series STRUCT issue
+            #
+            # Phase-aware generation logic:
+            #   - phases_present contains the actual CIM phases: A, B, C, N, S1, S2
+            #   - Split-phase (S1/S2): residential 120/240V service via center-tapped
+            #     transformer.  We map S1 → voltage_a, S2 → voltage_b, voltage_c = NULL.
+            #     Current similarly goes to current_a and current_b.
+            #   - Single-phase (A or B or C, possibly with N): only the present phase
+            #     gets voltage and current; the others are NULL.
+            #   - Three-phase (A,B,C): all three phases get values.
+            #
+            # The `has_*` flags are computed once in the `nodes` CTE and reused
+            # throughout so DuckDB can push the predicate down efficiently.
             query = f"""
                 COPY (
                     WITH
                     nodes AS (
-                        SELECT n.node_id, n.phases_present, COALESCE(d.distance_pct, 1.0) as distance_pct
+                        SELECT
+                            n.node_id,
+                            n.phases_present,
+                            COALESCE(d.distance_pct, 1.0) as distance_pct,
+                            -- Standard three-phase flags
+                            list_contains(n.phases_present, 'A') AS has_a,
+                            list_contains(n.phases_present, 'B') AS has_b,
+                            list_contains(n.phases_present, 'C') AS has_c,
+                            -- Split-phase flags (map S1→A slot, S2→B slot)
+                            list_contains(n.phases_present, 'S1') AS has_s1,
+                            list_contains(n.phases_present, 'S2') AS has_s2,
+                            -- Count of active power-carrying phases (for current splitting)
+                            (CASE WHEN list_contains(n.phases_present, 'A') THEN 1 ELSE 0 END
+                           + CASE WHEN list_contains(n.phases_present, 'B') THEN 1 ELSE 0 END
+                           + CASE WHEN list_contains(n.phases_present, 'C') THEN 1 ELSE 0 END
+                           + CASE WHEN list_contains(n.phases_present, 'S1') THEN 1 ELSE 0 END
+                           + CASE WHEN list_contains(n.phases_present, 'S2') THEN 1 ELSE 0 END
+                            ) AS phase_count
                         FROM grid_nodes n
                         LEFT JOIN node_distances d ON n.node_id = d.node_id
                     ),
@@ -185,44 +234,40 @@ def main():
                     weather_series AS (
                         SELECT t.*, COALESCE(w.temperature, 20.0) as temp
                         FROM time_series t
-                        LEFT JOIN weather_recordings w 
+                        LEFT JOIN weather_recordings w
                           ON t.mnth = w.month AND t.dy = w.day AND t.hr = w.hour
                     ),
                     combined_load AS (
                         SELECT
                             n.node_id,
-                            n.phases_present,
+                            n.has_a, n.has_b, n.has_c,
+                            n.has_s1, n.has_s2,
+                            n.phase_count,
                             n.distance_pct,
                             w.ts AS timestamp,
-                            -- Customer Type Intensity based on hash:
-                            -- 0-5 (60%): Residential
-                            -- 6-8 (30%): Small Commercial
-                            -- 9 (10%): Large Commercial (Industrial)
-                            CASE 
+                            CASE
                                 WHEN abs(hash(n.node_id)) % 10 IN (6, 7, 8) THEN 'Commercial'
                                 WHEN abs(hash(n.node_id)) % 10 = 9 THEN 'Industrial'
                                 ELSE 'Residential'
                             END as cust_type,
-                            -- Diurnal Base Load Factor:
                             CASE
-                                WHEN abs(hash(n.node_id)) % 10 IN (6, 7, 8, 9) -- Commercial/Industrial
-                                    THEN CASE 
-                                        WHEN w.hr BETWEEN 8 AND 18 THEN 1.0 
+                                WHEN abs(hash(n.node_id)) % 10 IN (6, 7, 8, 9)
+                                    THEN CASE
+                                        WHEN w.hr BETWEEN 8 AND 18 THEN 1.0
                                         WHEN w.hr BETWEEN 6 AND 22 THEN 0.6
-                                        ELSE 0.2 
+                                        ELSE 0.2
                                     END
-                                ELSE -- Residential
-                                    CASE 
+                                ELSE
+                                    CASE
                                         WHEN w.hr BETWEEN 6 AND 9 THEN 0.8
                                         WHEN w.hr BETWEEN 17 AND 22 THEN 1.0
                                         WHEN w.hr BETWEEN 9 AND 17 THEN 0.4
                                         ELSE 0.3
                                     END
                             END as base_lf,
-                            -- Nocturnal Heating Sensitivity Attenuation:
-                            CASE 
-                                WHEN w.hr BETWEEN 0 AND 6 THEN 0.4 -- 40% sensitivity at night
-                                ELSE 1.0 
+                            CASE
+                                WHEN w.hr BETWEEN 0 AND 6 THEN 0.4
+                                ELSE 1.0
                             END as heat_sensitivity,
                             w.temp
                         FROM nodes n
@@ -231,11 +276,13 @@ def main():
                     final_load AS (
                         SELECT
                             node_id,
-                            phases_present,
+                            has_a, has_b, has_c,
+                            has_s1, has_s2,
+                            phase_count,
                             distance_pct,
                             timestamp,
                             (
-                                CASE 
+                                CASE
                                     WHEN cust_type = 'Commercial' THEN 5.0
                                     WHEN cust_type = 'Industrial' THEN 20.0
                                     ELSE 1.0
@@ -246,30 +293,55 @@ def main():
                             ) AS lf
                         FROM combined_load
                     ),
-                    -- kWh and Voltages derived from load factor
                     combined AS (
                         SELECT
                             node_id,
                             timestamp,
 
-                            -- kWh delivered: proportional to load factor
+                            -- kWh delivered: total load (same regardless of phase count)
                             ROUND(0.20 * lf, 6) AS kwh_dlv,
 
-                            -- Voltages per phase (122V-124V nominal at sub, drops 0-5% based on load, 0-5% based on distance)
-                            CASE WHEN list_contains(phases_present, 'A')
-                                THEN ROUND((123.0 + (random() - 0.5) * 2.0) * (1.0 - LEAST(lf / 8.0, 1.0) * 0.05 - distance_pct * 0.05), 3) END AS voltage_a,
-                            CASE WHEN list_contains(phases_present, 'B')
-                                THEN ROUND((123.0 + (random() - 0.5) * 2.0) * (1.0 - LEAST(lf / 8.0, 1.0) * 0.05 - distance_pct * 0.05), 3) END AS voltage_b,
-                            CASE WHEN list_contains(phases_present, 'C')
-                                THEN ROUND((123.0 + (random() - 0.5) * 2.0) * (1.0 - LEAST(lf / 8.0, 1.0) * 0.05 - distance_pct * 0.05), 3) END AS voltage_c,
+                            -- ── Voltages ──
+                            -- Phase A: present if has_a OR split-phase S1 (S1 maps to A slot)
+                            CASE WHEN has_a OR has_s1
+                                THEN ROUND(
+                                    (123.0 + (random() - 0.5) * 2.0)
+                                    * (1.0 - LEAST(lf / 8.0, 1.0) * 0.05 - distance_pct * 0.05),
+                                3) END AS voltage_a,
 
-                            -- Currents per phase (proportional to load)
-                            CASE WHEN list_contains(phases_present, 'A')
-                                THEN ROUND(2.0 + lf * 25.0, 3) END AS current_a,
-                            CASE WHEN list_contains(phases_present, 'B')
-                                THEN ROUND(2.0 + lf * 25.0, 3) END AS current_b,
-                            CASE WHEN list_contains(phases_present, 'C')
-                                THEN ROUND(2.0 + lf * 25.0, 3) END AS current_c
+                            -- Phase B: present if has_b OR split-phase S2 (S2 maps to B slot)
+                            CASE WHEN has_b OR has_s2
+                                THEN ROUND(
+                                    (123.0 + (random() - 0.5) * 2.0)
+                                    * (1.0 - LEAST(lf / 8.0, 1.0) * 0.05 - distance_pct * 0.05),
+                                3) END AS voltage_b,
+
+                            -- Phase C: only present if has_c (never for split-phase)
+                            CASE WHEN has_c
+                                THEN ROUND(
+                                    (123.0 + (random() - 0.5) * 2.0)
+                                    * (1.0 - LEAST(lf / 8.0, 1.0) * 0.05 - distance_pct * 0.05),
+                                3) END AS voltage_c,
+
+                            -- ── Currents ──
+                            -- Current is split across present phases.
+                            -- For a 3-phase node each phase carries ~1/3 the total load current.
+                            -- For a single-phase node, 100% on that one phase.
+                            -- For split-phase, 50% on each leg.
+                            CASE WHEN has_a OR has_s1
+                                THEN ROUND(
+                                    (2.0 + lf * 25.0) / GREATEST(phase_count, 1),
+                                3) END AS current_a,
+
+                            CASE WHEN has_b OR has_s2
+                                THEN ROUND(
+                                    (2.0 + lf * 25.0) / GREATEST(phase_count, 1),
+                                3) END AS current_b,
+
+                            CASE WHEN has_c
+                                THEN ROUND(
+                                    (2.0 + lf * 25.0) / GREATEST(phase_count, 1),
+                                3) END AS current_c
 
                         FROM final_load
                     )

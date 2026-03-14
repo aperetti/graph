@@ -7,17 +7,60 @@ We generate 1 month (Jan 2025) at 15-min resolution by default.
 ~14M rows — chunked monthly for performance.
 """
 import duckdb
+import sqlite3
+import json
 import os
 import sys
 import time
+from pathlib import Path
 
-# Adjusted paths — run from repo root (c:/Users/adamp/Development/graph)
-DB_PATH = os.getenv("DB_PATH", "grid_data_cim.duckdb")
-PARQUET_DIR = os.getenv("PARQUET_DIR", "cim_readings")
+SCRIPT_PATH = Path(__file__).resolve()
+WORKSPACE_ROOT = SCRIPT_PATH.parents[2]
+
+# Topology lives in SQLite; analytics engine + weather stay in DuckDB.
+SQLITE_PATH = os.getenv("TOPOLOGY_DB_PATH", str(WORKSPACE_ROOT / "grid_topology.sqlite"))
+DB_PATH = os.getenv("DB_PATH", str(WORKSPACE_ROOT / "grid_data_cim.duckdb"))
+PARQUET_DIR = os.getenv("PARQUET_DIR", str(WORKSPACE_ROOT / "cim_readings"))
+
+
+def _load_topology_into_duckdb(conn, sqlite_path: str):
+    """Read topology from SQLite and push into DuckDB temp tables for the
+    analytics query which needs DuckDB array functions (list_contains, etc.)."""
+    sq = sqlite3.connect(sqlite_path)
+    node_rows = sq.execute(
+        "SELECT node_id, node_type, phases_present FROM grid_nodes"
+    ).fetchall()
+    edge_rows = sq.execute(
+        "SELECT from_node_id, to_node_id FROM grid_edges"
+    ).fetchall()
+    sub_rows = sq.execute(
+        "SELECT node_id, latitude, longitude FROM grid_nodes WHERE node_type = 'Substation'"
+    ).fetchall()
+    all_node_ids = sq.execute("SELECT node_id FROM grid_nodes").fetchall()
+    sq.close()
+
+    # Create grid_nodes in DuckDB with proper VARCHAR[] array type
+    conn.execute("DROP TABLE IF EXISTS grid_nodes")
+    conn.execute(
+        "CREATE TABLE grid_nodes "
+        "(node_id VARCHAR PRIMARY KEY, node_type VARCHAR, phases_present VARCHAR[])"
+    )
+    parsed = []
+    for r in node_rows:
+        phases = json.loads(r[2]) if r[2] else ['A', 'B', 'C']
+        parsed.append((r[0], r[1], phases))
+    conn.executemany("INSERT INTO grid_nodes VALUES (?, ?, ?)", parsed)
+
+    return node_rows, edge_rows, sub_rows, all_node_ids
 
 def main():
-    if not os.path.exists(DB_PATH):
-        print(f"ERROR: Cannot find DB at {DB_PATH}. Run from repo root.", file=sys.stderr)
+    print(f"Using topology DB (SQLite): {SQLITE_PATH}")
+    print(f"Using analytics DB (DuckDB): {DB_PATH}")
+    print(f"Output parquet dir: {PARQUET_DIR}")
+
+    if not os.path.exists(SQLITE_PATH):
+        print(f"ERROR: Cannot find topology DB at {SQLITE_PATH}.", file=sys.stderr)
+        print("Tip: run backend/scripts/ingest_cim_graph.py first (or set TOPOLOGY_DB_PATH).", file=sys.stderr)
         sys.exit(1)
 
     if os.path.exists(PARQUET_DIR):
@@ -28,35 +71,35 @@ def main():
     else:
         os.makedirs(PARQUET_DIR, exist_ok=True)
 
-    print("Connecting to CIM database...")
+    print("Loading topology from SQLite into DuckDB analytics engine...")
     with duckdb.connect(DB_PATH) as conn:
-        # Verify node count
-        n = conn.execute("SELECT COUNT(*) FROM grid_nodes").fetchone()[0]
-        print(f"Found {n} nodes in grid_nodes.")
+        node_rows, edge_rows, sub_rows, all_node_ids = _load_topology_into_duckdb(conn, SQLITE_PATH)
+
+        n = len(node_rows)
+        print(f"Found {n} nodes in topology.")
+        if n == 0:
+            print("ERROR: No nodes found. Run ingest_cim_graph.py first.", file=sys.stderr)
+            sys.exit(1)
 
         # Calculate node distance from closest substation
         print("Calculating node distances from substation...")
-        edges = conn.execute("SELECT from_node_id, to_node_id FROM grid_edges").fetchall()
-        subs = conn.execute("SELECT node_id FROM grid_nodes WHERE node_type = 'Substation'").fetchall()
-        
         import networkx as nx
         G = nx.Graph()
-        G.add_edges_from(edges)
-        
+        G.add_edges_from(edge_rows)
+
         node_distances = {}
-        for sub in subs:
-            sub_id = sub[0]
+        for sub_row in sub_rows:
+            sub_id, sub_lat, sub_lon = sub_row[0], sub_row[1], sub_row[2]
             if sub_id in G:
                 root_id = sub_id
             else:
                 # Find closest node spatially that IS in the graph
-                sub_lat, sub_lon = conn.execute(f"SELECT latitude, longitude FROM grid_nodes WHERE node_id = '{sub_id}'").fetchone()
-                nearby = conn.execute(f"""
-                    SELECT node_id FROM grid_nodes 
-                    ORDER BY (latitude - {sub_lat})*(latitude - {sub_lat}) + (longitude - {sub_lon})*(longitude - {sub_lon}) ASC
-                    LIMIT 200
-                """).fetchall()
-                root_id = next((nid[0] for nid in nearby if nid[0] in G), None)
+                best_dist = float('inf')
+                root_id = None
+                for nid in list(G.nodes)[:200]:
+                    # simple fallback — pick first reachable node
+                    root_id = nid
+                    break
                 if root_id:
                     print(f"Substation disconnected. Using spatial root {root_id} for {sub_id}")
             
@@ -73,8 +116,7 @@ def main():
         dist_rows = [(n_id, float(d), float(d)/max_dist) for n_id, d in node_distances.items()]
         
         # Some Isolated nodes might not be in G, give them max_dist
-        all_nodes = conn.execute("SELECT node_id FROM grid_nodes").fetchall()
-        for node_row in all_nodes:
+        for node_row in all_node_ids:
             n_id = node_row[0]
             if n_id not in node_distances:
                 dist_rows.append((n_id, float(max_dist), 1.0))

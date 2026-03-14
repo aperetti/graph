@@ -1,10 +1,44 @@
 import os
 import duckdb
 import xml.etree.ElementTree as ET
+from pathlib import Path
 
-# Run this script from the workspace root (e.g., C:\Users\adamp\Development\graph)
-DB_PATH = os.getenv("DB_PATH", "grid_data_cim.duckdb")
-XML_PATH = os.getenv("CIM_MODEL_PATH", "IEEE8500.xml")
+SCRIPT_PATH = Path(__file__).resolve()
+BACKEND_DIR = SCRIPT_PATH.parents[1]
+WORKSPACE_ROOT = SCRIPT_PATH.parents[2]
+
+
+def resolve_xml_path() -> Path:
+    """Resolves CIM XML path from env var or common project locations."""
+    env_xml = os.getenv("CIM_MODEL_PATH")
+    if env_xml:
+        p = Path(env_xml)
+        if p.is_file():
+            return p
+        # If relative path is provided, try resolving from CWD first
+        cwd_resolved = (Path.cwd() / p).resolve()
+        if cwd_resolved.is_file():
+            return cwd_resolved
+
+    candidates = [
+        BACKEND_DIR / "sample_data" / "IEEE8500.xml",
+        WORKSPACE_ROOT / "backend" / "sample_data" / "IEEE8500.xml",
+        WORKSPACE_ROOT / "sample_data" / "IEEE8500.xml",
+        Path.cwd() / "sample_data" / "IEEE8500.xml",
+        Path.cwd() / "IEEE8500.xml",
+    ]
+
+    for c in candidates:
+        if c.is_file():
+            return c
+
+    # Fall back to the primary expected location for a clearer error message
+    return BACKEND_DIR / "sample_data" / "IEEE8500.xml"
+
+
+# Default DB is workspace root so API and scripts read the same file.
+DB_PATH = os.getenv("DB_PATH", str(WORKSPACE_ROOT / "grid_data_cim.duckdb"))
+XML_PATH = str(resolve_xml_path())
 
 # We must map CIM phases to our schema: ['A', 'B', 'C', 'AB', 'AC', 'BC', 'ABC']
 # Depending on how the CIM defines it, PhaseCodes might exist or we just default them.
@@ -54,6 +88,7 @@ def extract_name(element, namespaces):
     return "Unknown"
 
 def main():
+    print(f"DB: {DB_PATH}")
     print(f"Parsing {XML_PATH}...")
     tree = ET.parse(XML_PATH)
     root = tree.getroot()

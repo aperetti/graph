@@ -1,61 +1,68 @@
-"""DuckDB Database Setup and Initialization."""
-import duckdb
+"""Database Setup and Initialization.
+
+Topology (grid_nodes, grid_edges, alarms) lives in **SQLite** for portability.
+DuckDB is kept purely as an analytics engine for parquet / weather queries.
+"""
 import os
+import sqlite3
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
+# ── SQLite: topology database (grid_nodes, grid_edges, alarms) ────
+SQLITE_PATH = os.getenv("TOPOLOGY_DB_PATH", os.path.join(BASE_DIR, "grid_topology.sqlite"))
+
+# ── DuckDB: analytics engine (weather_recordings + parquet reads) ─
 DB_PATH = os.getenv("DB_PATH", os.path.join(BASE_DIR, "grid_data_cim.duckdb"))
+
+# ── Parquet directories ───────────────────────────────────────────
 PARQUET_DIR = os.getenv("PARQUET_DIR", os.path.join(BASE_DIR, "cim_readings"))
 PARQUET_ALARMS_DIR = os.getenv("PARQUET_ALARMS_DIR", os.path.join(BASE_DIR, "cim_alarms"))
 
+
 def init_db():
-    """Initializes the DuckDB database schema."""
-    conn = duckdb.connect(DB_PATH)
-    
-    # Create the grid_nodes table
+    """Initialises the SQLite topology database schema."""
+    conn = sqlite3.connect(SQLITE_PATH)
+
     conn.execute("""
         CREATE TABLE IF NOT EXISTS grid_nodes (
-            node_id VARCHAR PRIMARY KEY,
-            node_type VARCHAR,
-            name VARCHAR,
-            phases_present VARCHAR,
-            latitude DOUBLE,
-            longitude DOUBLE
-        );
+            node_id   TEXT PRIMARY KEY,
+            node_type TEXT NOT NULL,
+            name      TEXT,
+            phases_present TEXT DEFAULT '["A","B","C"]',
+            latitude  REAL,
+            longitude REAL,
+            is_open   INTEGER DEFAULT 0
+        )
     """)
-    
-    # Create the grid_edges table
     conn.execute("""
         CREATE TABLE IF NOT EXISTS grid_edges (
-            edge_id VARCHAR PRIMARY KEY,
-            from_node_id VARCHAR,
-            to_node_id VARCHAR,
-            conductor_type VARCHAR,
-            phases VARCHAR
-        );
+            edge_id      TEXT PRIMARY KEY,
+            from_node_id TEXT NOT NULL,
+            to_node_id   TEXT NOT NULL,
+            conductor_type TEXT,
+            phases       TEXT DEFAULT '["A","B","C"]'
+        )
     """)
-    
-    # Create the alarms table
     conn.execute("""
         CREATE TABLE IF NOT EXISTS alarms (
-            alarm_id VARCHAR PRIMARY KEY,
-            node_id VARCHAR,
-            timestamp TIMESTAMP,
-            alarm_code VARCHAR,
-            severity VARCHAR,
-            message VARCHAR,
-            is_active BOOLEAN DEFAULT TRUE
-        );
+            alarm_id  TEXT PRIMARY KEY,
+            node_id   TEXT,
+            timestamp TEXT,
+            alarm_code TEXT,
+            severity  TEXT,
+            message   TEXT,
+            is_active INTEGER DEFAULT 1
+        )
     """)
-    
-    # Create directory for Parquet files if it doesn't exist
-    if not os.path.exists(PARQUET_DIR):
-        os.makedirs(PARQUET_DIR)
-        
-    if not os.path.exists(PARQUET_ALARMS_DIR):
-        os.makedirs(PARQUET_ALARMS_DIR)
-        
-    print(f"Database initialized at {DB_PATH}")
+
+    conn.commit()
     conn.close()
+
+    os.makedirs(PARQUET_DIR, exist_ok=True)
+    os.makedirs(PARQUET_ALARMS_DIR, exist_ok=True)
+
+    print(f"Topology database initialised at {SQLITE_PATH}")
+
 
 if __name__ == "__main__":
     init_db()

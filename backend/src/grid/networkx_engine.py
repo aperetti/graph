@@ -23,6 +23,8 @@ class NetworkXEngine(GraphEngine):
         if nodes:
             for node in nodes:
                 self.nodes[node.id] = node
+                # Register every node in the graph, including isolated ones.
+                self.graph.add_node(node.id)
                 if node.latitude is not None and node.longitude is not None:
                     pos = (round(node.latitude, 8), round(node.longitude, 8))
                     if pos not in self.pos_to_nodes:
@@ -52,20 +54,55 @@ class NetworkXEngine(GraphEngine):
     def find_downstream(self, start_node_id: str, max_depth: int = None) -> tuple[List[str], List[str]]:
         """Finds all node IDs and edge IDs logically downstream.
         Traverses the directed graph in the forward direction."""
-        if start_node_id not in self.graph:
+        resolved_start = self._resolve_start_node(start_node_id)
+        if resolved_start is None:
             return [], []
             
-        return self._bfs_traversal(self.graph, start_node_id, max_depth)
+        return self._bfs_traversal(self.graph, resolved_start, max_depth)
 
     def find_upstream(self, start_node_id: str, max_depth: int = None) -> tuple[List[str], List[str]]:
         """Finds all node IDs and edge IDs logically upstream.
         Traverses the directed graph in the reverse direction."""
-        if start_node_id not in self.graph:
+        resolved_start = self._resolve_start_node(start_node_id)
+        if resolved_start is None:
             return [], []
             
         # Reverse graph to follow flow "upwards"
         reversed_graph = self.graph.reverse()
-        return self._bfs_traversal(reversed_graph, start_node_id, max_depth)
+        return self._bfs_traversal(reversed_graph, resolved_start, max_depth)
+
+    def _resolve_start_node(self, start_node_id: str) -> str | None:
+        """Resolves a traversal start node.
+
+        If the selected node is isolated/disconnected (common in some CIM variants),
+        fall back to the nearest connected node by geographic distance.
+        """
+        if start_node_id not in self.nodes:
+            return None
+
+        if start_node_id in self.graph and self.graph.degree(start_node_id) > 0:
+            return start_node_id
+
+        start = self.nodes.get(start_node_id)
+        if not start or start.latitude is None or start.longitude is None:
+            return start_node_id if start_node_id in self.graph else None
+
+        best_node = None
+        best_dist = float("inf")
+
+        for node_id in self.graph.nodes:
+            if self.graph.degree(node_id) <= 0:
+                continue
+            candidate = self.nodes.get(node_id)
+            if not candidate or candidate.latitude is None or candidate.longitude is None:
+                continue
+
+            dist_sq = (candidate.latitude - start.latitude) ** 2 + (candidate.longitude - start.longitude) ** 2
+            if dist_sq < best_dist:
+                best_dist = dist_sq
+                best_node = node_id
+
+        return best_node if best_node is not None else (start_node_id if start_node_id in self.graph else None)
 
     def _bfs_traversal(self, graph: nx.Graph | nx.DiGraph | nx.MultiDiGraph, start_node_id: str, max_depth: int = None) -> tuple[List[str], List[str]]:
         """Generic BFS traversal for finding nodes and edges."""

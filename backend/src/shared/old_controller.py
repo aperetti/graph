@@ -2,7 +2,7 @@
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.concurrency import run_in_threadpool
 
-from src.shared.duckdb_repository import DuckDBRepository
+from src.shared.sqlite_repository import SqliteRepository
 from src.grid.networkx_engine import NetworkXEngine
 from src.discovery.discover_downstream import DiscoverDownstreamUseCase
 from src.discovery.trace_upstream import TraceUpstreamUseCase
@@ -12,7 +12,7 @@ from src.analytics.calculate_consumption import CalculateAggregateConsumptionUse
 from src.analytics.map_voltage import MapVoltageUseCase
 from src.analytics.get_alarms import GetActiveAlarmsUseCase
 from src.agent.translate_nl_to_sql import AgentQueryProcessor
-from src.shared.database_setup import DB_PATH, PARQUET_DIR
+from src.shared.database_setup import DB_PATH, PARQUET_DIR, SQLITE_PATH
 
 router = APIRouter()
 
@@ -21,7 +21,8 @@ async def estimate_test_unique():
     return {"status": "ok", "message": "unique route works"}
 
 # Initialize core dependencies (graph built lazily on first request)
-repo = DuckDBRepository(DB_PATH)
+# Topology (nodes/edges/alarms) → SQLite; analytics → DuckDB + Parquet
+repo = SqliteRepository(SQLITE_PATH)
 graph_engine = NetworkXEngine()
 _graph_initialized = False
 

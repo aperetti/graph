@@ -1,0 +1,12 @@
+{
+  "name": "graph-scripts",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Utility scripts for the Graph project",
+  "scripts": {
+    "capture-shots": "node capture-docs-shots.mjs"
+  },
+  "dependencies": {
+    "playwright": "^1.58.2"
+  }
+}

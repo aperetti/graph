@@ -132,7 +132,9 @@ export const GridMap = React.memo<GridMapProps>(({
                 );
             });
 
-            if (allVisible) {
+            // If only one node is highlighted (e.g. from search), we ALWAYS want to zoom to it 
+            // even if it's already visible, to provide clear feedback.
+            if (allVisible && highlightedNodes.size > 1) {
                 console.log('[GridMap] All nodes already visible, skipping zoom transition');
                 return;
             }
@@ -146,19 +148,32 @@ export const GridMap = React.memo<GridMapProps>(({
                 maxLat = Math.max(maxLat, lat);
             });
 
-            const { longitude, latitude, zoom } = viewport.fitBounds(
-                [[minLon, minLat], [maxLon, maxLat]],
-                {
-                    padding: Math.min(dimensions.width, dimensions.height) * 0.1,
-                    maxZoom: 18
-                }
-            );
+            // For a single point, fitBounds might not work as expected or zoom in too far/not enough.
+            // We'll calculate target state directly or add a small offset.
+            let targetLon, targetLat, targetZoom;
+
+            if (nodesToFit.length === 1) {
+                targetLon = nodesToFit[0].position[0];
+                targetLat = nodesToFit[0].position[1];
+                targetZoom = 17; // Good focus level
+            } else {
+                const bounds = viewport.fitBounds(
+                    [[minLon, minLat], [maxLon, maxLat]],
+                    {
+                        padding: Math.min(dimensions.width, dimensions.height) * 0.1,
+                        maxZoom: 18
+                    }
+                );
+                targetLon = bounds.longitude;
+                targetLat = bounds.latitude;
+                targetZoom = bounds.zoom;
+            }
 
             setViewState((prev: any) => ({
                 ...prev,
-                longitude,
-                latitude,
-                zoom,
+                longitude: targetLon,
+                latitude: targetLat,
+                zoom: targetZoom,
                 transitionDuration: 1000
             }));
         }

@@ -71,6 +71,7 @@ export function AnalysisToolbar({
                                 size="lg"
                                 onClick={onViewConsumption}
                                 radius="md"
+                                data-testid="btn-consumption"
                             >
                                 <BarChart3 size={18} />
                             </ActionIcon>
@@ -83,6 +84,7 @@ export function AnalysisToolbar({
                                 size="lg"
                                 onClick={onViewVoltage}
                                 radius="md"
+                                data-testid="btn-voltage"
                             >
                                 <Activity size={18} />
                             </ActionIcon>

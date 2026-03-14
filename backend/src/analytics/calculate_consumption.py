@@ -23,19 +23,20 @@ class CalculateAggregateConsumptionUseCase:
                 all_downstream_nodes.add(node_id)
         
         nodes_to_query = list(all_downstream_nodes)
-        nodes_list = "'" + "','".join(nodes_to_query) + "'"
+        placeholders = ",".join(["?"] * len(nodes_to_query))
+        query_params = nodes_to_query + [start_time, end_time]
         
         prefetch_query = f"""
             SELECT COUNT(*) as estimated_rows
             FROM read_parquet('{self.parquet_dir}/*.parquet') r
-            WHERE r.node_id IN ({nodes_list})
-              AND r.timestamp >= '{start_time}' 
-              AND r.timestamp <= '{end_time}'
+            WHERE r.node_id IN ({placeholders})
+              AND r.timestamp >= CAST(? AS TIMESTAMP)
+              AND r.timestamp <= CAST(? AS TIMESTAMP)
         """
         
         try:
             with duckdb.connect(self.db_path, read_only=True) as conn:
-                prefetch_results = conn.execute(prefetch_query).fetchone()
+                prefetch_results = conn.execute(prefetch_query, query_params).fetchone()
             
             return {
                 "estimated_rows": prefetch_results[0] if prefetch_results else 0,
@@ -61,7 +62,8 @@ class CalculateAggregateConsumptionUseCase:
                 all_downstream_edges.update(edges)
         
         nodes_to_query = list(all_downstream_nodes)
-        nodes_list = "'" + "','".join(nodes_to_query) + "'"
+        placeholders = ",".join(["?"] * len(nodes_to_query))
+        query_params = nodes_to_query + [start_time, end_time]
         
         query = f"""
             SELECT 
@@ -77,16 +79,16 @@ class CalculateAggregateConsumptionUseCase:
                 ON w.month = EXTRACT(month FROM r.timestamp)
                 AND w.day = EXTRACT(day FROM r.timestamp)
                 AND w.hour = EXTRACT(hour FROM r.timestamp)
-            WHERE r.node_id IN ({nodes_list})
-              AND r.timestamp >= '{start_time}' 
-              AND r.timestamp <= '{end_time}'
+            WHERE r.node_id IN ({placeholders})
+              AND r.timestamp >= CAST(? AS TIMESTAMP)
+              AND r.timestamp <= CAST(? AS TIMESTAMP)
             GROUP BY r.timestamp
             ORDER BY r.timestamp ASC
         """
         
         try:
             with duckdb.connect(self.db_path, read_only=True) as conn:
-                results = conn.execute(query).fetchall()
+                results = conn.execute(query, query_params).fetchall()
                 
             time_series = [
                 {

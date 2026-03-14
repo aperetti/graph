@@ -12,6 +12,7 @@ import { ConsumptionTimeSeriesModal } from './features/analytics/components/Cons
 import { VoltageDistributionModal } from './features/analytics/components/VoltageDistributionModal';
 import { VoltageScalePanel } from './features/analytics/components/VoltageScalePanel';
 import { GlobalSettingsModal, type GlobalConfig } from './features/analytics/components/GlobalSettingsModal';
+import { GlobalSearch } from './features/grid/components/GlobalSearch';
 import {
   fetchTopology,
   fetchConsumption,
@@ -154,6 +155,26 @@ export default function App() {
     localStorage.setItem('voltageScale', JSON.stringify(voltageScale));
   }, [voltageScale]);
 
+  // Deep-link support: Handle ?node=ID URL parameter
+  useEffect(() => {
+    console.log('[App] Deep-link check, nodes.length:', nodes.length);
+    if (nodes.length > 0) {
+      const params = new URLSearchParams(window.location.search);
+      const nodeId = params.get('node');
+      console.log('[App] URL node param:', nodeId);
+      if (nodeId) {
+        const node = nodes.find(n => n.id === nodeId);
+        if (node) {
+          console.log('[App] AUTO-SELECTING node:', nodeId);
+          setSelectedNodes([node]);
+          setFitBoundsTrigger(prev => prev + 1);
+        } else {
+          console.error('[App] URL node not found in topology:', nodeId);
+        }
+      }
+    }
+  }, [nodes]);
+
 
   const handleClearSelection = useCallback(() => setSelectedNodes([]), []);
   const isMobile = useMediaQuery('(max-width: 768px)');
@@ -171,6 +192,13 @@ export default function App() {
       return [...prev, node];
     });
   }, [isMobile]);
+
+  const handleNodeSearchSelect = useCallback((node: Node) => {
+    setSelectedNodes([node]);
+    setHighlightedNodes(new Set([node.id]));
+    setHighlightedEdges(new Set());
+    setFitBoundsTrigger(prev => prev + 1);
+  }, []);
 
   useEffect(() => {
     fetchTopology()
@@ -285,9 +313,9 @@ export default function App() {
       setDateRange({ start, end });
     }
 
-    // Minimize other consumption windows
+    // Global minimization: minimize ALL other windows regardless of type
     setAnalysisWindows(prev => prev.map(w =>
-      (w.type === 'consumption' && w.id !== windowId)
+      (w.id !== windowId)
         ? { ...w, isMinimized: true }
         : w
     ));
@@ -426,9 +454,9 @@ export default function App() {
       setDateRange({ start, end });
     }
 
-    // Minimize other voltage windows
+    // Global minimization: minimize ALL other windows regardless of type
     setAnalysisWindows(prev => prev.map(w =>
-      (w.type === 'voltage' && w.id !== windowId)
+      (w.id !== windowId)
         ? { ...w, isMinimized: true }
         : w
     ));
@@ -554,6 +582,8 @@ export default function App() {
                     <Settings size={20} />
                   </ActionIcon>
                 </Tooltip>
+
+                <GlobalSearch nodes={nodes} onNodeSelect={handleNodeSearchSelect} />
 
                 <Menu shadow="md" width={200} position="bottom-end" withArrow offset={10}>
                   <Menu.Target>
@@ -699,7 +729,11 @@ export default function App() {
                   boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
                   border: '1px solid rgba(255,255,255,0.1)'
                 }}
-                onClick={() => updateWindow(win.id, { isMinimized: false })}
+                onClick={() => {
+                  setAnalysisWindows(prev => prev.map(w =>
+                    w.id === win.id ? { ...w, isMinimized: false } : { ...w, isMinimized: true }
+                  ));
+                }}
               >
                 <Group gap="xs" wrap="nowrap">
                   {win.type === 'consumption' ? <Zap size={14} color="#339af0" /> : <Activity size={14} color="#fab005" />}

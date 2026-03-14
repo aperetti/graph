@@ -177,6 +177,10 @@ export default function App() {
 
 
   const handleClearSelection = useCallback(() => setSelectedNodes([]), []);
+  const handleNodeSearchSelect = useCallback((node: Node) => {
+    setSelectedNodes([node]);
+    setFitBoundsTrigger(prev => prev + 1);
+  }, []);
   const isMobile = useMediaQuery('(max-width: 768px)');
 
   const onNodeClick = useCallback((node: Node, multiSelect: boolean) => {

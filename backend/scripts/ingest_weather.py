@@ -1,9 +1,13 @@
 import os
 import duckdb
 import io
+from pathlib import Path
 
-DB_PATH = os.getenv("DB_PATH", "grid_data_cim.duckdb")
-WEATHER_PATH = os.getenv("WEATHER_DATA_PATH", "sample_data/weather.epw")
+SCRIPT_PATH = Path(__file__).resolve()
+WORKSPACE_ROOT = SCRIPT_PATH.parents[2]
+
+DB_PATH = os.getenv("DB_PATH", str(WORKSPACE_ROOT / "grid_data_cim.duckdb"))
+WEATHER_PATH = os.getenv("WEATHER_DATA_PATH", str(SCRIPT_PATH.parents[1] / "sample_data" / "weather.epw"))
 
 def setup_weather_table(conn):
     """Creates the weather_recordings table."""

@@ -33,3 +33,5 @@ grid_data_cim.duckdb.wal
 
 .jules/
 grid_topology.sqlite
+grid_topology.sqlite-wal
+grid_topology.sqlite-shm

@@ -1,7 +1,13 @@
-"""API Controller for the Analytical Agent and Graph Queries."""
+"""API Controller for the Analytical Agent and Graph Queries.
+
+All topology data is served from the in-memory CIM-Graph FeederModel
+(loaded at application startup).  SQLite is retained only for alarms.
+DuckDB + Parquet remain the analytics engine for time-series queries.
+"""
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.concurrency import run_in_threadpool
 
+from src.shared.cim_model import CimModelManager
 from src.shared.sqlite_repository import SqliteRepository
 from src.grid.networkx_engine import NetworkXEngine
 from src.discovery.discover_downstream import DiscoverDownstreamUseCase
@@ -16,25 +22,33 @@ from src.shared.database_setup import DB_PATH, PARQUET_DIR, SQLITE_PATH
 
 router = APIRouter()
 
+
 @router.get("/estimate-test-unique")
 async def estimate_test_unique():
     return {"status": "ok", "message": "unique route works"}
 
-# Initialize core dependencies (graph built lazily on first request)
-# Topology (nodes/edges/alarms) → SQLite; analytics → DuckDB + Parquet
-repo = SqliteRepository(SQLITE_PATH)
+
+# ── Core dependencies ─────────────────────────────────────────────
+# CIM model singleton (populated during FastAPI lifespan startup)
+cim_manager = CimModelManager.get_instance()
+
+# SQLite is kept only for alarms (generated offline by a separate script)
+alarm_repo = SqliteRepository(SQLITE_PATH)
+
 graph_engine = NetworkXEngine()
 _graph_initialized = False
 
+
 def _ensure_graph_built():
-    """Builds the graph from DB if not already done (lazy init)."""
+    """Build the NetworkX graph from the in-memory CIM model (lazy, once)."""
     global _graph_initialized
     if not _graph_initialized:
         from src.grid.graph_node import GraphNode
-        edges = repo.get_all_edges()
-        nodes_raw = repo.get_all_nodes_with_coordinates()
-        
-        # Convert raw DB dicts to GraphNode objects with coordinates
+
+        # Pull topology directly from the CIM-Graph FeederModel
+        nodes_raw = cim_manager.get_topology_nodes()
+        edges = cim_manager.get_topology_edges()
+
         nodes = [
             GraphNode(
                 id=n["node_id"],
@@ -42,15 +56,18 @@ def _ensure_graph_built():
                 name=n["name"] or n["node_id"],
                 phases=n.get("phases_present") or ["A", "B", "C"],
                 latitude=n["latitude"],
-                longitude=n["longitude"]
+                longitude=n["longitude"],
+                connected_equipment=n.get("connected_equipment", []),
+                base_voltage_kv=n.get("base_voltage_kv"),
             )
             for n in nodes_raw
         ]
-        
+
         graph_engine.build_graph(nodes=nodes, edges=edges)
         _graph_initialized = True
 
-# Initialize use cases
+
+# ── Use cases (analytics still use DuckDB + Parquet) ──────────────
 downstream_uc = DiscoverDownstreamUseCase(graph_engine)
 upstream_uc = TraceUpstreamUseCase(graph_engine)
 voltage_uc = CalculateVoltageDistributionUseCase(graph_engine, DB_PATH, PARQUET_DIR)
@@ -170,18 +187,21 @@ async def process_agent_query(query: str):
 
 @router.get("/api/graph/topology")
 async def get_topology():
-    """Returns the full grid topology with coordinates for UI rendering."""
+    """Returns the full grid topology with coordinates for UI rendering.
+
+    All data is served from the in-memory CIM-Graph FeederModel.
+    """
     _ensure_graph_built()
-    nodes = repo.get_all_nodes_with_coordinates()
-    all_edges = repo.get_all_edges()
-    
+    nodes = cim_manager.get_topology_nodes()
+    all_edges = cim_manager.get_topology_edges()
+
     # Trace circuits from Substations
     substations = [n['node_id'] for n in nodes if n['node_type'] == 'Substation']
     node_to_circuit = {}
-    
+
     import networkx as nx
     undirected_graph = graph_engine.graph.to_undirected()
-    
+
     components = list(nx.connected_components(undirected_graph))
     node_to_comp_idx = {}
     for idx, comp in enumerate(components):
@@ -196,11 +216,14 @@ async def get_topology():
     for comp_idx, circuit_id in comp_to_circuit.items():
         for node in components[comp_idx]:
             node_to_circuit[node] = circuit_id
-    
-    # We need to attach source and target coordinates to the edges for Deck.gl LineLayer
-    node_coords = {n['node_id']: [n['longitude'], n['latitude']] for n in nodes if n['longitude'] and n['latitude']}
-    
-    # Map into Deck.GL format directly
+
+    # Attach source and target coordinates to the edges for Deck.gl LineLayer
+    node_coords = {
+        n['node_id']: [n['longitude'], n['latitude']]
+        for n in nodes if n['longitude'] and n['latitude']
+    }
+
+    # Map into Deck.GL format with enriched CIM attributes
     mapped_nodes = []
     for n in nodes:
         if n['longitude'] and n['latitude']:
@@ -210,9 +233,12 @@ async def get_topology():
                 "name": n['name'],
                 "position": [n['longitude'], n['latitude']],
                 "circuit_id": node_to_circuit.get(n['node_id'], "unknown"),
-                "is_open": n.get('is_open', False)
+                "is_open": n.get('is_open', False),
+                "phases": n.get('phases_present', ['A', 'B', 'C']),
+                "base_voltage_kv": n.get('base_voltage_kv'),
+                "connected_equipment": n.get('connected_equipment', []),
             })
-            
+
     mapped_edges = []
     for e in all_edges:
         src = e['from_node_id']
@@ -225,14 +251,53 @@ async def get_topology():
                 "sourcePosition": node_coords[src],
                 "targetPosition": node_coords[tgt],
                 "circuit_id": node_to_circuit.get(src, "unknown"),
-                "phases": e.get('phases')
+                "phases": e.get('phases'),
+                "conductor_type": e.get('conductor_type'),
             })
-            
+
     return {"nodes": mapped_nodes, "edges": mapped_edges}
+
+
+# ═══════════════════════════════════════════════════════════════════
+# CIM Model endpoints – query the in-memory FeederModel directly
+# ═══════════════════════════════════════════════════════════════════
+
+@router.get("/api/cim/classes")
+async def get_cim_classes():
+    """List all CIM classes loaded into memory with their object counts."""
+    return cim_manager.get_cim_classes()
+
+
+@router.get("/api/cim/equipment-by-class/{class_name}")
+async def get_equipment_by_class(class_name: str):
+    """List all equipment objects of a given CIM class (e.g. ACLineSegment)."""
+    items = cim_manager.get_all_equipment_by_class(class_name)
+    if not items:
+        raise HTTPException(status_code=404, detail=f"No objects found for class '{class_name}'")
+    return {"class": class_name, "count": len(items), "items": items}
+
+
+@router.get("/api/cim/equipment/{mrid}")
+async def get_equipment_detail(mrid: str):
+    """Full CIM detail for any equipment by mRID (impedances, ratings, windings, etc.)."""
+    detail = cim_manager.get_equipment_detail(mrid)
+    if detail is None:
+        raise HTTPException(status_code=404, detail=f"Equipment not found: {mrid}")
+    return detail
+
+
+@router.get("/api/cim/node/{node_id}")
+async def get_node_cim_details(node_id: str):
+    """Enriched CIM details for a connectivity node and all its connected equipment."""
+    detail = cim_manager.get_node_cim_details(node_id)
+    if detail is None:
+        raise HTTPException(status_code=404, detail=f"Connectivity node not found: {node_id}")
+    return detail
+
 
 @router.get("/discovery/alarms/{node_id}")
 async def get_node_alarms(node_id: str, include_downstream: bool = Query(True)):
     """Fetch active alarms for a node and optionally its downstream children."""
-    use_case = GetActiveAlarmsUseCase(repo, graph_engine)
+    use_case = GetActiveAlarmsUseCase(alarm_repo, graph_engine)
     alarms = use_case.execute(node_id, include_downstream)
     return [a.dict() for a in alarms]

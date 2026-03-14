@@ -1,12 +1,33 @@
 """Main Application Entry Point (FastAPI equivalent to Fastify)."""
 # Force reload for route detection
+from contextlib import asynccontextmanager
+import logging
+
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from src.shared import old_controller as agent_controller
 import os
 
-app = FastAPI(title="Grid-Scale Analytical Agent", version="1.0.0")
+logging.basicConfig(level=logging.INFO, format="%(levelname)s | %(name)s | %(message)s")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Load the CIM-Graph FeederModel into memory at startup."""
+    from src.shared.cim_model import CimModelManager
+
+    manager = CimModelManager.get_instance()
+    manager.load()  # parses CIM XML once — all APIs use the in-memory model
+    yield
+    # shutdown: nothing special required (GC handles it)
+
+
+app = FastAPI(
+    title="Grid-Scale Analytical Agent",
+    version="1.0.0",
+    lifespan=lifespan,
+)
 
 # CORS for local dev
 app.add_middleware(

@@ -172,6 +172,12 @@ export default function App() {
     });
   }, [isMobile]);
 
+  const onEdgeClick = useCallback((edge: Edge, multiSelect: boolean) => {
+    const targetNode = nodes.find(n => n.id === edge.source) || nodes.find(n => n.id === edge.target);
+    if (!targetNode) return;
+    onNodeClick(targetNode, multiSelect);
+  }, [nodes, onNodeClick]);
+
   useEffect(() => {
     fetchTopology()
       .then(data => {
@@ -513,6 +519,7 @@ export default function App() {
               nodes={nodes}
               edges={edges}
               onNodeClick={onNodeClick}
+              onEdgeClick={onEdgeClick}
               highlightedNodes={highlightedNodes}
               highlightedEdges={highlightedEdges}
               selectedNodeIds={selectedNodes.map(n => n.id)}

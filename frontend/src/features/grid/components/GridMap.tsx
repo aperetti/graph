@@ -9,6 +9,7 @@ interface GridMapProps {
     nodes: Node[];
     edges: Edge[];
     onNodeClick: (node: Node, multiSelect: boolean) => void;
+    onEdgeClick?: (edge: Edge, multiSelect: boolean) => void;
     highlightedNodes?: Set<string>;
     highlightedEdges?: Set<string>;
     selectedNodeIds?: string[];
@@ -66,6 +67,7 @@ export const GridMap = React.memo<GridMapProps>(({
     nodes,
     edges,
     onNodeClick,
+    onEdgeClick,
     highlightedNodes = new Set(),
     highlightedEdges = new Set(),
     selectedNodeIds = [],
@@ -249,6 +251,12 @@ export const GridMap = React.memo<GridMapProps>(({
             onHover: (info) => {
                 setHoveredEdgeId(info.object ? (info.object.id || `${info.object.source}-${info.object.target}`) : null);
             },
+            onClick: (info, event) => {
+                const srcEvent = (event as any).srcEvent as MouseEvent;
+                if (info.object && srcEvent && onEdgeClick) {
+                    onEdgeClick(info.object as Edge, srcEvent.shiftKey || srcEvent.ctrlKey);
+                }
+            },
             updateTriggers: {
                 getColor: [highlightedEdges, nodeAverages, voltageScale],
                 getWidth: [highlightedEdges, hoveredEdgeId, nodeAverages]
@@ -410,7 +418,7 @@ export const GridMap = React.memo<GridMapProps>(({
                 }
             }
         })
-    ], [nodes, edges, hoveredNodeId, hoveredEdgeId, highlightedNodes, highlightedEdges, selectedNodeIdsSet, switchPositions, nodeAverages, voltageScale, onNodeClick, viewState.zoom]);
+    ], [nodes, edges, hoveredNodeId, hoveredEdgeId, highlightedNodes, highlightedEdges, selectedNodeIdsSet, switchPositions, nodeAverages, voltageScale, onNodeClick, onEdgeClick, viewState.zoom]);
 
     return (
         <div

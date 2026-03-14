@@ -5,6 +5,16 @@ export interface TopologyResponse {
     edges: Edge[];
 }
 
+export interface ModelInfo {
+    model_id: string;
+    filename: string;
+    path: string;
+    size_mb: number;
+    loaded: boolean;
+    node_count: number;
+    edge_count: number;
+}
+
 export interface ConsumptionResponse {
     start_node_id: string;
     node_count: number;
@@ -61,8 +71,12 @@ export interface PhaseBalanceResponse {
 
 const API_BASE = '/api';
 
-export const fetchTopology = async (): Promise<TopologyResponse> => {
-    const res = await fetch(`${API_BASE}/graph/topology`);
+export const fetchTopology = async (models?: string[]): Promise<TopologyResponse> => {
+    let url = `${API_BASE}/graph/topology`;
+    if (models && models.length > 0) {
+        url += `?models=${models.join(',')}`;
+    }
+    const res = await fetch(url);
     return res.json();
 };
 
@@ -156,6 +170,32 @@ export const nlQuery = async (query: string): Promise<any> => {
     });
     if (!res.ok) {
         throw new Error('Query failed');
+    }
+    return res.json();
+};
+
+// --- Model Management ---
+
+export const fetchModels = async (): Promise<ModelInfo[]> => {
+    const res = await fetch(`${API_BASE}/models`);
+    if (!res.ok) {
+        throw new Error('Failed to fetch models');
+    }
+    return res.json();
+};
+
+export const loadModel = async (modelId: string): Promise<ModelInfo> => {
+    const res = await fetch(`${API_BASE}/models/${modelId}/load`, { method: 'POST' });
+    if (!res.ok) {
+        throw new Error(`Failed to load model ${modelId}`);
+    }
+    return res.json();
+};
+
+export const unloadModel = async (modelId: string): Promise<{ status: string }> => {
+    const res = await fetch(`${API_BASE}/models/${modelId}/unload`, { method: 'POST' });
+    if (!res.ok) {
+        throw new Error(`Failed to unload model ${modelId}`);
     }
     return res.json();
 };

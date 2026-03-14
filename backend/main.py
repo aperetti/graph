@@ -14,11 +14,11 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s | %(name)s | %(mes
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Load the CIM-Graph FeederModel into memory at startup."""
-    from src.shared.cim_model import CimModelManager
+    """Load the CIM-Graph FeederModels into memory at startup."""
+    from src.shared.cim_registry import CimModelRegistry
 
-    manager = CimModelManager.get_instance()
-    manager.load()  # parses CIM XML once — all APIs use the in-memory model
+    registry = CimModelRegistry.get_instance()
+    registry.load_default()  # discovers XMLs, loads the preferred model
     yield
     # shutdown: nothing special required (GC handles it)
 

@@ -13,6 +13,7 @@ import { VoltageDistributionModal } from './features/analytics/components/Voltag
 import { VoltageScalePanel } from './features/analytics/components/VoltageScalePanel';
 import { GlobalSettingsModal, type GlobalConfig } from './features/analytics/components/GlobalSettingsModal';
 import { GlobalSearch } from './features/grid/components/GlobalSearch';
+import { ModelSwitcher } from './features/grid/components/ModelSwitcher';
 import {
   fetchTopology,
   fetchConsumption,
@@ -88,6 +89,7 @@ export default function App() {
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
   const [selectedNodes, setSelectedNodes] = useState<Node[]>([]);
+  const [activeModelIds, setActiveModelIds] = useState<string[]>([]);
 
   const [globalConfig, setGlobalConfig] = useState<GlobalConfig>(() => {
     const saved = localStorage.getItem('globalConfig');
@@ -203,8 +205,15 @@ export default function App() {
     onNodeClick(targetNode, multiSelect);
   }, [nodes, onNodeClick]);
 
+  // Reload topology when model selection changes
+  const handleModelsChange = useCallback((modelIds: string[]) => {
+    setActiveModelIds(modelIds);
+  }, []);
+
   useEffect(() => {
-    fetchTopology()
+    // Only fetch once we know which models are active (initial load or model toggle)
+    const modelsParam = activeModelIds.length > 0 ? activeModelIds : undefined;
+    fetchTopology(modelsParam)
       .then(data => {
         setNodes(data.nodes);
         setEdges(data.edges);
@@ -213,7 +222,7 @@ export default function App() {
         }
       })
       .catch(err => console.error('[App] Failed to fetch topology:', err));
-  }, []);
+  }, [activeModelIds]);
 
 
 
@@ -588,6 +597,8 @@ export default function App() {
                 </Tooltip>
 
                 <GlobalSearch nodes={nodes} onNodeSelect={handleNodeSearchSelect} />
+
+                <ModelSwitcher onModelsChange={handleModelsChange} />
 
                 <Menu shadow="md" width={200} position="bottom-end" withArrow offset={10}>
                   <Menu.Target>

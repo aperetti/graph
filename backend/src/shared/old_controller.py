@@ -1,13 +1,14 @@
 """API Controller for the Analytical Agent and Graph Queries.
 
-All topology data is served from the in-memory CIM-Graph FeederModel
-(loaded at application startup).  SQLite is retained only for alarms.
+All topology data is served from the in-memory CIM-Graph FeederModels
+managed by CimModelRegistry.  SQLite is retained only for alarms.
 DuckDB + Parquet remain the analytics engine for time-series queries.
 """
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.concurrency import run_in_threadpool
+from typing import Optional
 
-from src.shared.cim_model import CimModelManager
+from src.shared.cim_registry import CimModelRegistry
 from src.shared.sqlite_repository import SqliteRepository
 from src.grid.networkx_engine import NetworkXEngine
 from src.discovery.discover_downstream import DiscoverDownstreamUseCase
@@ -29,42 +30,60 @@ async def estimate_test_unique():
 
 
 # ── Core dependencies ─────────────────────────────────────────────
-# CIM model singleton (populated during FastAPI lifespan startup)
-cim_manager = CimModelManager.get_instance()
+# CIM model registry (populated during FastAPI lifespan startup)
+registry = CimModelRegistry.get_instance()
 
 # SQLite is kept only for alarms (generated offline by a separate script)
 alarm_repo = SqliteRepository(SQLITE_PATH)
 
 graph_engine = NetworkXEngine()
-_graph_initialized = False
+_graph_built_for: set[str] = set()  # model_ids the graph was last built for
 
 
-def _ensure_graph_built():
-    """Build the NetworkX graph from the in-memory CIM model (lazy, once)."""
-    global _graph_initialized
-    if not _graph_initialized:
-        from src.grid.graph_node import GraphNode
+def _get_active_model_ids(models_param: Optional[str] = None) -> list[str]:
+    """Parse the ?models= query param into a list of model IDs.
 
-        # Pull topology directly from the CIM-Graph FeederModel
-        nodes_raw = cim_manager.get_topology_nodes()
-        edges = cim_manager.get_topology_edges()
+    * None / empty  → all active models
+    * comma-separated string → specific models
+    """
+    if not models_param:
+        return registry.get_active_model_ids()
+    return [m.strip() for m in models_param.split(",") if m.strip()]
 
-        nodes = [
-            GraphNode(
-                id=n["node_id"],
-                type=n["node_type"],
-                name=n["name"] or n["node_id"],
-                phases=n.get("phases_present") or ["A", "B", "C"],
-                latitude=n["latitude"],
-                longitude=n["longitude"],
-                connected_equipment=n.get("connected_equipment", []),
-                base_voltage_kv=n.get("base_voltage_kv"),
-            )
-            for n in nodes_raw
-        ]
 
-        graph_engine.build_graph(nodes=nodes, edges=edges)
-        _graph_initialized = True
+def _ensure_graph_built(model_ids: list[str] | None = None):
+    """Build the NetworkX graph from the in-memory CIM models.
+
+    Rebuilds automatically when the set of active models changes.
+    """
+    global _graph_built_for
+
+    requested = set(model_ids) if model_ids else set(registry.get_active_model_ids())
+    if requested == _graph_built_for:
+        return
+
+    from src.grid.graph_node import GraphNode
+
+    nodes_raw, edges = registry.get_combined_topology(
+        list(requested) if model_ids else None
+    )
+
+    nodes = [
+        GraphNode(
+            id=n["node_id"],
+            type=n["node_type"],
+            name=n["name"] or n["node_id"],
+            phases=n.get("phases_present") or ["A", "B", "C"],
+            latitude=n["latitude"],
+            longitude=n["longitude"],
+            connected_equipment=n.get("connected_equipment", []),
+            base_voltage_kv=n.get("base_voltage_kv"),
+        )
+        for n in nodes_raw
+    ]
+
+    graph_engine.build_graph(nodes=nodes, edges=edges)
+    _graph_built_for = requested
 
 
 # ── Use cases (analytics still use DuckDB + Parquet) ──────────────
@@ -186,14 +205,17 @@ async def process_agent_query(query: str):
     return {"generated_prompt": result}
 
 @router.get("/api/graph/topology")
-async def get_topology():
+async def get_topology(
+    models: Optional[str] = Query(None, description="Comma-separated model IDs (default: all active)")
+):
     """Returns the full grid topology with coordinates for UI rendering.
 
-    All data is served from the in-memory CIM-Graph FeederModel.
+    Supports loading from one, many, or all in-memory CIM-Graph models.
+    Pass ?models=IEEE8500 or ?models=IEEE8500,IEEE8500_3subs to filter.
     """
-    _ensure_graph_built()
-    nodes = cim_manager.get_topology_nodes()
-    all_edges = cim_manager.get_topology_edges()
+    model_ids = _get_active_model_ids(models)
+    _ensure_graph_built(model_ids)
+    nodes, all_edges = registry.get_combined_topology(model_ids)
 
     # Trace circuits from Substations
     substations = [n['node_id'] for n in nodes if n['node_type'] == 'Substation']
@@ -237,6 +259,7 @@ async def get_topology():
                 "phases": n.get('phases_present', ['A', 'B', 'C']),
                 "base_voltage_kv": n.get('base_voltage_kv'),
                 "connected_equipment": n.get('connected_equipment', []),
+                "model_id": n.get('model_id', 'unknown'),
             })
 
     mapped_edges = []
@@ -253,25 +276,95 @@ async def get_topology():
                 "circuit_id": node_to_circuit.get(src, "unknown"),
                 "phases": e.get('phases'),
                 "conductor_type": e.get('conductor_type'),
+                "model_id": e.get('model_id', 'unknown'),
             })
 
     return {"nodes": mapped_nodes, "edges": mapped_edges}
 
 
 # ═══════════════════════════════════════════════════════════════════
-# CIM Model endpoints – query the in-memory FeederModel directly
+# Model management endpoints
 # ═══════════════════════════════════════════════════════════════════
+
+@router.get("/api/models")
+async def list_models():
+    """List all discovered CIM models with their loaded status."""
+    return registry.list_models()
+
+
+@router.post("/api/models/{model_id}/load")
+async def load_model(model_id: str):
+    """Load a CIM model into memory by its ID."""
+    global _graph_built_for
+    try:
+        registry.load_model(model_id)
+        _graph_built_for = set()  # force graph rebuild
+        mgr = registry.get_manager(model_id)
+        return {
+            "model_id": model_id,
+            "loaded": True,
+            "node_count": len(mgr.get_topology_nodes()) if mgr else 0,
+            "edge_count": len(mgr.get_topology_edges()) if mgr else 0,
+        }
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.post("/api/models/{model_id}/unload")
+async def unload_model(model_id: str):
+    """Unload a CIM model, freeing memory."""
+    global _graph_built_for
+    if model_id not in registry.get_active_model_ids():
+        raise HTTPException(status_code=404, detail=f"Model '{model_id}' is not loaded")
+    if len(registry.get_active_model_ids()) <= 1:
+        raise HTTPException(status_code=400, detail="Cannot unload the last active model")
+    registry.unload_model(model_id)
+    _graph_built_for = set()  # force graph rebuild
+    return {"model_id": model_id, "loaded": False}
+
+
+# ═══════════════════════════════════════════════════════════════════
+# CIM Model endpoints – query the in-memory FeederModels directly
+# ═══════════════════════════════════════════════════════════════════
+
+def _find_manager_for_mrid(mrid: str):
+    """Search all loaded models for an equipment mRID."""
+    for mid, mgr in registry.get_managers():
+        detail = mgr.get_equipment_detail(mrid)
+        if detail is not None:
+            detail["model_id"] = mid
+            return detail
+    return None
+
+
+def _find_manager_for_node(node_id: str):
+    """Search all loaded models for a connectivity node."""
+    for mid, mgr in registry.get_managers():
+        detail = mgr.get_node_cim_details(node_id)
+        if detail is not None:
+            detail["model_id"] = mid
+            return detail
+    return None
+
 
 @router.get("/api/cim/classes")
 async def get_cim_classes():
     """List all CIM classes loaded into memory with their object counts."""
-    return cim_manager.get_cim_classes()
+    combined: dict[str, int] = {}
+    for _mid, mgr in registry.get_managers():
+        for cls_name, count in mgr.get_cim_classes().items():
+            combined[cls_name] = combined.get(cls_name, 0) + count
+    return dict(sorted(combined.items()))
 
 
 @router.get("/api/cim/equipment-by-class/{class_name}")
 async def get_equipment_by_class(class_name: str):
     """List all equipment objects of a given CIM class (e.g. ACLineSegment)."""
-    items = cim_manager.get_all_equipment_by_class(class_name)
+    items = []
+    for mid, mgr in registry.get_managers():
+        for item in mgr.get_all_equipment_by_class(class_name):
+            item["model_id"] = mid
+            items.append(item)
     if not items:
         raise HTTPException(status_code=404, detail=f"No objects found for class '{class_name}'")
     return {"class": class_name, "count": len(items), "items": items}
@@ -280,7 +373,7 @@ async def get_equipment_by_class(class_name: str):
 @router.get("/api/cim/equipment/{mrid}")
 async def get_equipment_detail(mrid: str):
     """Full CIM detail for any equipment by mRID (impedances, ratings, windings, etc.)."""
-    detail = cim_manager.get_equipment_detail(mrid)
+    detail = _find_manager_for_mrid(mrid)
     if detail is None:
         raise HTTPException(status_code=404, detail=f"Equipment not found: {mrid}")
     return detail
@@ -289,7 +382,7 @@ async def get_equipment_detail(mrid: str):
 @router.get("/api/cim/node/{node_id}")
 async def get_node_cim_details(node_id: str):
     """Enriched CIM details for a connectivity node and all its connected equipment."""
-    detail = cim_manager.get_node_cim_details(node_id)
+    detail = _find_manager_for_node(node_id)
     if detail is None:
         raise HTTPException(status_code=404, detail=f"Connectivity node not found: {node_id}")
     return detail

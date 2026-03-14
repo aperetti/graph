@@ -5,6 +5,7 @@ export interface Node {
     position: [number, number];
     is_open?: boolean;
     circuit_id?: string;
+    model_id?: string;
 }
 
 export interface Edge {
@@ -15,4 +16,5 @@ export interface Edge {
     sourcePosition: [number, number];
     targetPosition: [number, number];
     circuit_id?: string;
+    model_id?: string;
 }

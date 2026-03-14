@@ -121,7 +121,11 @@ def _parse_phase_code(phase_code) -> Optional[list[str]]:
 # ═══════════════════════════════════════════════════════════════════════════
 
 class CimModelManager:
-    """Singleton that owns the in-memory CIM-Graph FeederModel.
+    """Holds a single in-memory CIM-Graph FeederModel.
+
+    Instances are created by ``CimModelRegistry`` (one per XML file).
+    A legacy singleton accessor ``get_instance()`` is retained for
+    backward-compatibility with scripts that load a single model.
 
     After ``load()`` is called the manager provides:
     * Pre-computed topology (nodes & edges) for the NetworkX graph.
@@ -135,6 +139,7 @@ class CimModelManager:
         self.network = None          # FeederModel
         self.cim = None              # cimgraph.data_profile.rc4_2021
         self._loaded = False
+        self.model_id: str = ""      # set by registry or load()
 
         # ── Indexes (populated by _build_indexes) ─────────────────
         self._equipment_index: dict[str, tuple[str, Any]] = {}   # mRID → (cls_name, obj)
@@ -150,7 +155,7 @@ class CimModelManager:
         self._topology_nodes: list[dict] = []
         self._topology_edges: list[dict] = []
 
-    # ── Singleton access ──────────────────────────────────────────
+    # ── Singleton access (legacy — prefer CimModelRegistry) ───────
 
     @classmethod
     def get_instance(cls) -> "CimModelManager":
@@ -185,6 +190,9 @@ class CimModelManager:
 
         if not path.is_file():
             raise FileNotFoundError(f"CIM XML not found: {path}")
+
+        # Record model identity
+        self.model_id = path.stem
 
         # ── Import CIM-Graph (deferred so env vars are set first) ─
         import cimgraph.data_profile.rc4_2021 as cim

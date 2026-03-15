@@ -8,7 +8,7 @@ An interactive, full-stack application for analyzing electrical distribution gri
 
 ## Features
 
-- **Interactive Grid Map** — Navigate a 12,000+ node IEEE 8500 distribution model with zoom, pan, node selection, and a right-click context menu.
+- **Interactive Grid Map** — Navigate a 12,000+ node IEEE 8500 distribution model with zoom, pan, and node selection via an inline analytics toolbar.
 - **Graph Traversal** — Trace upstream to the source substation or downstream to every affected meter from any selected device.
 - **Voltage Distribution** — Statistical breakdown (mean, median, std dev) of voltage readings across any downstream sub-tree over a user-defined time range.
 - **Phase Balance Analysis** — Aggregate kWh and instantaneous current across phases A, B, and C to identify neutral loading or phase imbalance.
@@ -59,7 +59,7 @@ Once running, open your browser:
 | :--- | :--- |
 | Web Dashboard | <http://localhost:8080> |
 | API (Swagger) | <http://localhost:8000/docs> |
-| Documentation | <http://localhost:3000> |
+| Documentation | <http://localhost:3002> |
 
 ---
 
@@ -76,7 +76,7 @@ Customize the deployment using a `.env` file in the project root or by overridin
 | `WEATHER_DATA_PATH` | `/app/sample_data/weather.epw` | Path to the EPW weather data file. |
 | `BACKEND_PORT` | `8000` | Host port for the backend service. |
 | `FRONTEND_PORT` | `8080` | Host port for the frontend dashboard. |
-| `WEBSITE_PORT` | `3000` | Host port for the documentation site. |
+| `WEBSITE_PORT` | `3002` | Host port for the documentation site. |
 
 ### Manual Data Refresh
 
@@ -93,12 +93,13 @@ docker compose --profile tools run generator
 ### Interacting with the Map
 
 - **Zoom & Pan** — Use your mouse or trackpad to navigate the map.
-- **Node Selection** — Click any node (Substation, Transformer, Switch, or Meter) to open the details panel.
-- **Context Menu** — Right-click a node to access analysis shortcuts:
-  - **Trace Downstream** — Highlight all assets logically below the selected node.
-  - **Trace Upstream** — Trace the path back to the source substation.
-  - **Run Voltage Analysis** — Open the voltage distribution panel.
-  - **Run Phase Balance** — Analyze current and energy imbalance across phases.
+- **Node Selection** — Click any node (Substation, Transformer, Switch, or Meter) to select it. Use **Shift+Click** or **Ctrl+Click** to multi-select.
+- **Analytics Toolbar** — When one or more nodes are selected, a floating toolbar appears in the top-right with:
+  - **Consumption** (📊) — Open the Consumption Time Series analysis for the selected assets.
+  - **Voltage** (📈) — Open the Voltage Distribution analysis for the selected assets.
+  - **Date Range** — Click to configure the analysis time window.
+  - **Clear** (✕) — Deselect all nodes.
+- **Hamburger Menu** (☰) — Access Voltage Map settings, Global Settings, and Documentation.
 
 ### Degrees of Separation
 
@@ -112,10 +113,95 @@ Most analyses let you configure **Degrees of Separation**, which controls the de
 
 ---
 
+## Local Development
+
+Follow these steps to get a full development environment running with hot-reload on all three services.
+
+### Prerequisites
+
+- **Python 3.12+** and `pip`
+- **Node.js 20+** and `npm`
+
+### 1. Generate Sample Data
+
+Before the app can display anything useful you need a DuckDB database and Parquet readings. Run the bootstrap pipeline once from the `backend/` directory:
+
+```bash
+cd backend
+
+# Create a virtual environment and install dependencies
+python -m venv .venv
+.venv\Scripts\activate        # Windows
+# source .venv/bin/activate   # macOS / Linux
+
+pip install -r requirements.txt
+
+# Set required environment variables (adjust paths as needed)
+$env:DB_PATH      = "./data/grid_data_cim.duckdb"           # PowerShell
+$env:PARQUET_DIR  = "./data/cim_readings"
+$env:CIM_MODEL_PATH    = "./sample_data/IEEE8500.xml"
+$env:WEATHER_DATA_PATH = "./sample_data/weather.epw"
+$env:PYTHONPATH   = "."
+
+# Run the data pipeline
+mkdir -p data
+python scripts/ingest_cim_graph.py
+python scripts/ingest_weather.py
+python scripts/generate_cim_readings.py
+```
+
+> **Tip:** You only need to run data generation once. The database and Parquet files persist in `backend/data/`.
+
+### 2. Start the Backend (FastAPI)
+
+```bash
+cd backend
+# activate venv if not already active
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+The API is now live at <http://localhost:8000> with Swagger docs at <http://localhost:8000/docs>.
+
+### 3. Start the Frontend (Vite)
+
+In a new terminal:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+The dashboard opens at <http://localhost:3001> and proxies `/api` requests to the backend and `/docs` requests to the documentation site.
+
+### 4. Start the Documentation Site (Docusaurus)
+
+In a new terminal:
+
+```bash
+cd docs
+npm install
+npm run start
+```
+
+The docs site opens at <http://localhost:3002>.
+
+### Dev Server Summary
+
+| Service | Command | URL |
+| :--- | :--- | :--- |
+| Backend | `uvicorn main:app --reload` | <http://localhost:8000> |
+| Frontend | `npm run dev` (in `frontend/`) | <http://localhost:3001> |
+| Docs | `npm run start` (in `docs/`) | <http://localhost:3002> |
+
+> The Vite dev server automatically proxies `/api` → `localhost:8000` and `/docs` → `localhost:3002`, so you can access everything through <http://localhost:3001>.
+
+---
+
 ## Project Structure
 
 ```
-graph/
+Griddy/
 ├── backend/              # FastAPI service, graph engine, analytics
 │   ├── src/
 │   │   ├── agent/        # Natural language → SQL translation
@@ -141,7 +227,7 @@ graph/
 
 ## Documentation
 
-Full documentation is available at <http://localhost:3000> after starting the stack, and covers:
+Full documentation is available at <http://localhost:3002> after starting the stack, and covers:
 
 - [Grid Analysis Guide](docs/docs/analysis-guide/index.md)
 - [Voltage Analysis](docs/docs/analysis-guide/voltage-analysis.md)

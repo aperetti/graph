@@ -36,7 +36,7 @@ services:
       context: ./docs
     container_name: grid-docs
     ports:
-      - "${WEBSITE_PORT:-3000}:3000"
+      - "${WEBSITE_PORT:-3002}:3000"
     restart: unless-stopped
 
   generator:

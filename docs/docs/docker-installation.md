@@ -37,7 +37,7 @@ You can customize the deployment using the following variables in the `docker-co
 | `CIM_MODEL_PATH` | `/app/IEEE8500.xml` | Path to the CIM source model file. |
 | `BACKEND_PORT` | `8000` | Host port for the backend service. |
 | `FRONTEND_PORT` | `8080` | Host port for the frontend dashboard. |
-| `WEBSITE_PORT` | `3000` | Host port for this documentation site. |
+| `WEBSITE_PORT` | `3002` | Host port for this documentation site. |
 
 ## Accessing the Application
 
@@ -45,6 +45,7 @@ Once the containers are running, you can access the system at:
 
 - **Web Dashboard**: [http://localhost:8080](http://localhost:8080)
 - **API Documentation (Swagger)**: [http://localhost:8000/docs](http://localhost:8000/docs)
+- **Documentation Site**: [http://localhost:3002](http://localhost:3002)
 
 ## Persistence
 

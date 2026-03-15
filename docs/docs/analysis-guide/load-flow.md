@@ -7,9 +7,9 @@ Unbalanced loads cause neutral currents, excessive heat in transformers, and inc
 
 ## Running the Analysis
 
-1. Right-click a **Substation** or **Transformer**.
-2. Select **Run Phase Balance**.
-3. Choose your temporal granularity.
+1. Click a **Substation** or **Transformer** on the map to select it.
+2. Click the **Consumption** (📊) icon in the analytics toolbar to view phase-level energy delivery.
+3. Review the per-phase breakdown to identify imbalance.
 
 ## Key Metrics
 

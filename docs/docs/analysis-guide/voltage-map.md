@@ -4,7 +4,7 @@ The Voltage Map provides a system-wide view of grid health by coloring every nod
 
 ## Using the Map
 
-- **Toggle**: Access the **Voltage Map** from the analytics sidebar.
+- **Toggle**: Access the **Voltage Map** from the hamburger menu (☰) in the top-right corner and select **Voltage Map Settings**.
 - **Aggregation**: Choose how to summarize the data:
   - **Min**: Highlights the worst-case voltage drops.
   - **Max**: Highlights potential over-voltage issues.

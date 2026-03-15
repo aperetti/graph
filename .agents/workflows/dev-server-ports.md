@@ -9,7 +9,7 @@ description: Development server ports and URLs for the Griddy project
 | Service         | Port   | URL                      | Config Source                          |
 |-----------------|--------|--------------------------|----------------------------------------|
 | **Frontend**    | `3001` | http://localhost:3001     | `frontend/vite.config.ts` → `server.port` |
-| **Docs**        | `3000` | http://localhost:3000     | Docusaurus default                     |
+| **Docs**        | `3002` | http://localhost:3002     | `docs/package.json` → `start` script   |
 | **Backend API** | `8000` | http://localhost:8000/api | `backend/main.py` → `uvicorn.run(port=8000)` |
 
 ## Proxy Configuration
@@ -17,7 +17,7 @@ description: Development server ports and URLs for the Griddy project
 The Vite dev server (port 3001) proxies API and docs requests:
 
 - `/api/*` → `http://localhost:8000` (backend)
-- `/docs/*` → `http://localhost:3000` (docusaurus)
+- `/docs/*` → `http://localhost:3002` (docusaurus)
 
 ## Start Commands
 
@@ -30,4 +30,4 @@ The Vite dev server (port 3001) proxies API and docs requests:
 ## Common Mistakes
 
 - **Do NOT use port 5173** — that is Vite's default, but this project overrides it to `3001`.
-- **Do NOT confuse ports 3000 (docs) and 3001 (frontend)** — they are separate services.
+- **Do NOT confuse ports 3002 (docs) and 3001 (frontend)** — they are separate services.

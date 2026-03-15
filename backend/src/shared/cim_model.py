@@ -150,6 +150,7 @@ class CimModelManager:
         self._eq_terminals: dict[str, list] = defaultdict(list)  # eq mRID → [(term, cn_mRID)]
         self._cn_equipment: dict[str, list] = defaultdict(list)  # cn mRID → [eq mRID]
         self._eq_phases: dict[str, list[str]] = {}               # eq mRID → ["A","B",…]
+        self._transformer_kva: dict[str, float] = {}             # PowerTransformer mRID → KVA
 
         # ── Pre-computed topology ─────────────────────────────────
         self._topology_nodes: list[dict] = []
@@ -259,6 +260,9 @@ class CimModelManager:
 
         # ── 5. Equipment phase index from per-phase CIM objects ───
         self._build_equipment_phase_index()
+
+        # 5b. PowerTransformer KVA ratings ─────────────────────────
+        self._build_transformer_index()
 
         # ── 6. Build topology graph ───────────────────────────────
         self._build_topology()
@@ -424,6 +428,26 @@ class CimModelManager:
             len(self._eq_phases),
         )
 
+    # ── PowerTransformer KVA Index ──────────────────────────────
+
+    def _build_transformer_index(self):
+        """Map PowerTransformer mRIDs to their nominal KVA rating."""
+        cim = self.cim
+        graph = self.network.graph
+
+        pte_cls = getattr(cim, "PowerTransformerEnd", None)
+        if pte_cls:
+            for _eid, pte in graph.get(pte_cls, {}).items():
+                pt = getattr(pte, "PowerTransformer", None)
+                pt_mrid = _mrid_str(pt)
+                if pt_mrid:
+                    va = _safe_float(getattr(pte, "ratedS", None))
+                    if va:
+                        kva = va / 1000.0
+                        # Capture the maximum rating among windings (usually identical)
+                        current = self._transformer_kva.get(pt_mrid, 0.0)
+                        self._transformer_kva[pt_mrid] = max(current, kva)
+
     # ── Topology graph ────────────────────────────────────────────
 
     def _build_topology(self):
@@ -468,6 +492,11 @@ class CimModelManager:
                     elif eq_type == "PowerTransformer":
                         if node_type in ("Bus", "Meter", "Switch", "Breaker"):
                             node_type = "Transformer"
+                        
+                        # Capture transformer size (KVA)
+                        kva = self._transformer_kva.get(eq_mrid)
+                        if kva:
+                            transformer_kva = kva
                     elif eq_type == "Capacitor":
                         if node_type == "Bus":
                             node_type = "Capacitor"
@@ -498,6 +527,7 @@ class CimModelManager:
                 "is_open": is_open,
                 "connected_equipment": connected_equipment,
                 "base_voltage_kv": base_voltage_kv,
+                "transformer_kva": locals().get("transformer_kva"), # Captured inside equipment loop
             })
 
         # ── Edges from conducting equipment ───────────────────────

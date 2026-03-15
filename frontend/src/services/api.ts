@@ -7,6 +7,7 @@ export interface Node {
     position: [number, number];
     circuit_id?: string;
     is_open?: boolean; // Used by switches and breakers
+    transformer_kva?: number;
 }
 
 export interface Edge {

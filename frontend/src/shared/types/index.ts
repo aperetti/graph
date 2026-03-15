@@ -6,6 +6,7 @@ export interface Node {
     is_open?: boolean;
     circuit_id?: string;
     model_id?: string;
+    transformer_kva?: number;
 }
 
 export interface Edge {

@@ -472,7 +472,7 @@ export const GridMap = React.memo<GridMapProps>(({
                                 <div style="padding: 10px; background: #25262b; border: 1px solid #373A40; border-radius: 8px; color: #fff;">
                                 <strong>ID:</strong> ${object.id}<br/>
                                 <strong>Type:</strong> ${object.type}<br/>
-                                <strong>Name:</strong> ${object.name}
+                                <strong>Name:</strong> ${object.name}${object.transformer_kva ? `<br/><strong>Transformer Size:</strong> ${object.transformer_kva} kVA` : ''}
                                 </div>
                             `,
                                 style: { backgroundColor: 'transparent', fontSize: '13px' }

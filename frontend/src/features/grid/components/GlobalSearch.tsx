@@ -1,5 +1,6 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { Select, Group, Text, Box, ActionIcon, Popover, Tooltip } from '@mantine/core';
+import { useHotkeys } from '@mantine/hooks';
 import { Search } from 'lucide-react';
 import type { Node, Edge } from '../../../shared/types';
 
@@ -13,6 +14,19 @@ interface GlobalSearchProps {
 export function GlobalSearch({ nodes, edges, onSearchSelect, isMobile }: GlobalSearchProps) {
   const [searchValue, setSearchValue] = useState('');
   const [opened, setOpened] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  useHotkeys([
+    ['/', () => {
+      if (isMobile) {
+        setOpened(true);
+        // Small delay to allow popover to open before focusing
+        setTimeout(() => searchInputRef.current?.focus(), 50);
+      } else {
+        searchInputRef.current?.focus();
+      }
+    }]
+  ]);
 
   const searchData = useMemo(() => {
     const nodeItems = nodes.map(node => ({
@@ -46,6 +60,7 @@ export function GlobalSearch({ nodes, edges, onSearchSelect, isMobile }: GlobalS
 
   const selectElement = (
     <Select
+      ref={searchInputRef}
       placeholder="Search nodes..."
       leftSection={<Search size={16} />}
       data={filteredData}

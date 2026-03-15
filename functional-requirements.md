@@ -29,6 +29,7 @@
 
 ## 3. User Interface & Visualization
 * **Interactive Graph View**: A map or schematic-based view to select devices for analysis.
+  * **Hover Information**: Display key attributes when hovering over nodes (e.g., Name, Type, and for Transformers, their KVA rating).
 * **Context Menu**: A right-click context menu on nodes to perform actions such as running downstream analytics or viewing consumption time series.
 * **Distribution Histograms**: To visualize the "spread" of voltage across a circuit.
 * **Time-Series Charts**: Overlaying multiple meters or aggregated circuit loads to find correlations.

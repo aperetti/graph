@@ -28,3 +28,6 @@ class GraphNode(BaseModel):
     base_voltage_kv: Optional[float] = Field(
         None, description="Nominal voltage (kV) from VoltageLevel / BaseVoltage",
     )
+    transformer_kva: Optional[float] = Field(
+        None, description="Nominal transformer kVA rating (for Transformer nodes)",
+    )

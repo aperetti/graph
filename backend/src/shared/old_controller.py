@@ -78,6 +78,7 @@ def _ensure_graph_built(model_ids: list[str] | None = None):
             longitude=n["longitude"],
             connected_equipment=n.get("connected_equipment", []),
             base_voltage_kv=n.get("base_voltage_kv"),
+            transformer_kva=n.get("transformer_kva"),
         )
         for n in nodes_raw
     ]
@@ -258,6 +259,7 @@ async def get_topology(
                 "is_open": n.get('is_open', False),
                 "phases": n.get('phases_present', ['A', 'B', 'C']),
                 "base_voltage_kv": n.get('base_voltage_kv'),
+                "transformer_kva": n.get('transformer_kva'),
                 "connected_equipment": n.get('connected_equipment', []),
                 "model_id": n.get('model_id', 'unknown'),
             })

@@ -112,31 +112,30 @@ export const GridMap = React.memo<GridMapProps>(({
             const nodesToFit = nodes.filter(n => highlightedNodes.has(n.id));
             if (nodesToFit.length === 0) return;
 
-            // Check if all highlighted nodes are already visible
             const viewport = new WebMercatorViewport({
                 width: dimensions.width,
                 height: dimensions.height,
                 ...viewState
             });
 
-            const allVisible = nodesToFit.every(n => {
-                const [x, y] = viewport.project(n.position);
-                // 10% padding check
-                const paddingX = dimensions.width * 0.1;
-                const paddingY = dimensions.height * 0.1;
-                return (
-                    x >= paddingX &&
-                    x <= dimensions.width - paddingX &&
-                    y >= paddingY &&
-                    y <= dimensions.height - paddingY
-                );
-            });
+            // If more than one node is highlighted, check if they are all visible
+            if (highlightedNodes.size > 1) {
+                const allVisible = nodesToFit.every(n => {
+                    const [x, y] = viewport.project(n.position);
+                    const paddingX = dimensions.width * 0.1;
+                    const paddingY = dimensions.height * 0.1;
+                    return (
+                        x >= paddingX &&
+                        x <= dimensions.width - paddingX &&
+                        y >= paddingY &&
+                        y <= dimensions.height - paddingY
+                    );
+                });
 
-            // If only one node is highlighted (e.g. from search), we ALWAYS want to zoom to it 
-            // even if it's already visible, to provide clear feedback.
-            if (allVisible && highlightedNodes.size > 1) {
-                console.log('[GridMap] All nodes already visible, skipping zoom transition');
-                return;
+                if (allVisible) {
+                    console.log('[GridMap] All nodes already visible, skipping zoom transition');
+                    return;
+                }
             }
 
             let minLon = Infinity, maxLon = -Infinity, minLat = Infinity, maxLat = -Infinity;
@@ -148,19 +147,17 @@ export const GridMap = React.memo<GridMapProps>(({
                 maxLat = Math.max(maxLat, lat);
             });
 
-            // For a single point, fitBounds might not work as expected or zoom in too far/not enough.
-            // We'll calculate target state directly or add a small offset.
             let targetLon, targetLat, targetZoom;
 
             if (nodesToFit.length === 1) {
                 targetLon = nodesToFit[0].position[0];
                 targetLat = nodesToFit[0].position[1];
-                targetZoom = 17; // Good focus level
+                targetZoom = Math.max(viewState.zoom, 17); // Focus in but don't zoom out
             } else {
                 const bounds = viewport.fitBounds(
                     [[minLon, minLat], [maxLon, maxLat]],
                     {
-                        padding: Math.min(dimensions.width, dimensions.height) * 0.1,
+                        padding: Math.min(dimensions.width, dimensions.height) * 0.2,
                         maxZoom: 18
                     }
                 );

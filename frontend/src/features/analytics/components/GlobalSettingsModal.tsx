@@ -1,7 +1,8 @@
 import { Paper, Stack, Group, Text, NumberInput, SegmentedControl, Button, Divider, Alert, Box, ActionIcon, Title } from '@mantine/core';
 import { DatePickerInput } from '@mantine/dates';
+import { useWindowEvent } from '@mantine/hooks';
 import { Settings, Info, X } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Rnd } from 'react-rnd';
 
 export interface GlobalConfig {
@@ -20,26 +21,40 @@ interface GlobalSettingsModalProps {
 
 export function GlobalSettingsModal({ opened, onClose, config, onSave }: GlobalSettingsModalProps) {
     const [localConfig, setLocalConfig] = useState<GlobalConfig>(config);
-    const [rndState, setRndState] = useState(() => {
+    
+    const getInitialState = () => {
         const saved = localStorage.getItem('settingsWindowPos');
         if (saved) {
             try {
-                return JSON.parse(saved);
+                return clampToViewport(JSON.parse(saved));
             } catch (e) {
                 console.error('Failed to parse saved settingsWindowPos', e);
             }
         }
+        
+        const width = Math.min(450, window.innerWidth - 40);
         return {
-            x: (window.innerWidth / 2) - 225,
-            y: (window.innerHeight / 2) - 250,
-            width: 450,
+            x: (window.innerWidth / 2) - (width / 2),
+            y: Math.max(20, (window.innerHeight / 2) - 250),
+            width: width,
             height: 'auto'
         };
-    });
+    };
+
+    const [rndState, setRndState] = useState(getInitialState);
+
+    const clamp = useCallback(() => {
+        setRndState(prev => clampToViewport(prev));
+    }, []);
+
+    useWindowEvent('resize', clamp);
 
     useEffect(() => {
         setLocalConfig(config);
-    }, [config, opened]);
+        if (opened) {
+            clamp();
+        }
+    }, [config, opened, clamp]);
 
     if (!opened) return null;
 
@@ -49,7 +64,7 @@ export function GlobalSettingsModal({ opened, onClose, config, onSave }: GlobalS
     };
 
     const handleRndChange = (d: any) => {
-        const newState = { ...rndState, ...d };
+        const newState = clampToViewport({ ...rndState, ...d });
         setRndState(newState);
         localStorage.setItem('settingsWindowPos', JSON.stringify(newState));
     };
@@ -66,7 +81,7 @@ export function GlobalSettingsModal({ opened, onClose, config, onSave }: GlobalS
                     ...position
                 });
             }}
-            minWidth={400}
+            minWidth={Math.min(400, window.innerWidth - 20)}
             bounds="window"
             dragHandleClassName="handle"
             style={{ zIndex: 10001 }}
@@ -87,19 +102,19 @@ export function GlobalSettingsModal({ opened, onClose, config, onSave }: GlobalS
                     border: '1px solid rgba(255,255,255,0.1)'
                 }}
             >
-                <Box px="md" py="xs" className="handle" style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', cursor: 'grab' }}>
+                <Box px="md" py="xs" style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
                     <Group justify="space-between" align="center" wrap="nowrap">
-                        <Group gap="xs">
+                        <Group gap="xs" className="handle" style={{ cursor: 'grab', flex: 1 }}>
                             <Settings size={18} />
                             <Title order={5}>Analysis Settings</Title>
                         </Group>
-                        <ActionIcon variant="subtle" color="gray" onClick={onClose}>
+                        <ActionIcon variant="subtle" color="gray" onClick={onClose} title="Close window">
                             <X size={18} />
                         </ActionIcon>
                     </Group>
                 </Box>
 
-                <Box p="md">
+                <Box p="md" style={{ overflowY: 'auto' }}>
                     <Stack gap="md">
                         <Text size="sm" c="dimmed">
                             Define the default time window used for consumption and voltage analysis.
@@ -176,4 +191,16 @@ export function GlobalSettingsModal({ opened, onClose, config, onSave }: GlobalS
             </Paper>
         </Rnd>
     );
+}
+
+function clampToViewport(pos: { x: number; y: number; width: number | string; height: number | string }) {
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const w = Math.min(typeof pos.width === 'number' ? pos.width : parseInt(pos.width as string), vw - 20);
+    const h = typeof pos.height === 'number' ? pos.height : (pos.height === 'auto' ? 500 : parseInt(pos.height as string));
+    
+    const x = Math.max(10, Math.min(pos.x, vw - w - 10));
+    const y = Math.max(10, Math.min(pos.y, vh - (typeof h === 'number' ? h : 100) - 10));
+    
+    return { x, y, width: w, height: pos.height };
 }

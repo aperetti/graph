@@ -68,7 +68,7 @@ export function ModelSwitcher({ onModelsChange }: ModelSwitcherProps) {
         <Tooltip label="CIM Models" position="bottom" withArrow>
           <ActionIcon
             variant="filled"
-            color={loadedCount > 1 ? 'teal' : 'gray'}
+            color={opened ? 'blue' : 'gray'}
             size="xl"
             radius="md"
             onClick={() => setOpened(o => !o)}

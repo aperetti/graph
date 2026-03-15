@@ -90,8 +90,8 @@ export function AnalysisWindow({
                     ...position,
                 });
             }}
-            minWidth={400}
-            minHeight={400}
+            minWidth={Math.min(400, window.innerWidth - 20)}
+            minHeight={Math.min(400, window.innerHeight - 100)}
             bounds="window"
             dragHandleClassName="analysis-window-handle"
             enableResizing={{
@@ -136,6 +136,7 @@ export function AnalysisWindow({
                                         whiteSpace: 'nowrap',
                                         overflow: 'hidden',
                                         textOverflow: 'ellipsis',
+                                        fontSize: window.innerWidth < 600 ? '14px' : undefined
                                     }}
                                 >
                                     {title}
@@ -151,6 +152,7 @@ export function AnalysisWindow({
                                     size="xs"
                                     color="gray"
                                     leftSection={<Filter size={14} />}
+                                    visibleFrom="xs"
                                     rightSection={
                                         showFilters ? (
                                             <ChevronUp size={14} />
@@ -162,6 +164,16 @@ export function AnalysisWindow({
                                 >
                                     Filters
                                 </Button>
+                            )}
+                            {filterContent && (
+                                <ActionIcon 
+                                    variant="subtle" 
+                                    hiddenFrom="xs" 
+                                    onClick={() => setShowFilters(!showFilters)}
+                                    color={showFilters ? 'blue' : 'gray'}
+                                >
+                                    <Filter size={16} />
+                                </ActionIcon>
                             )}
                             {onMinimize && (
                                 <ActionIcon variant="subtle" onClick={onMinimize} title="Minimize">
@@ -204,13 +216,15 @@ export function AnalysisWindow({
 /* ── Helpers ─────────────────────────────────────────────── */
 
 function defaultPosition() {
-    const width = 600;
-    const height = Math.min(800, window.innerHeight - 100);
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const width = Math.min(600, vw - 40);
+    const height = Math.min(800, vh - 100);
     // Add a bit of randomness to default position so multiple new windows don't stack perfectly
     const offset = Math.floor(Math.random() * 40);
     return {
-        x: Math.max(0, window.innerWidth - width - 50 - offset),
-        y: Math.max(0, Math.min(50 + offset, window.innerHeight - height - 20)),
+        x: Math.max(10, vw - width - 20 - offset),
+        y: Math.max(10, Math.min(50 + offset, vh - height - 20)),
         width,
         height,
     };
@@ -219,9 +233,9 @@ function defaultPosition() {
 function clampToViewport(pos: { x: number; y: number; width: number; height: number }) {
     const vw = window.innerWidth;
     const vh = window.innerHeight;
-    const w = Math.min(typeof pos.width === 'number' ? pos.width : parseInt(pos.width), vw - 40);
+    const w = Math.min(typeof pos.width === 'number' ? pos.width : parseInt(pos.width), vw - 20);
     const h = Math.min(typeof pos.height === 'number' ? pos.height : parseInt(pos.height), vh - 40);
-    const x = Math.max(0, Math.min(pos.x, vw - w - 20));
-    const y = Math.max(0, Math.min(pos.y, vh - h - 20));
+    const x = Math.max(10, Math.min(pos.x, vw - w - 10));
+    const y = Math.max(10, Math.min(pos.y, vh - h - 10));
     return { x, y, width: w, height: h };
 }

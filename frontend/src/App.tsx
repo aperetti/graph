@@ -89,6 +89,8 @@ export default function App() {
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
   const [selectedNodes, setSelectedNodes] = useState<Node[]>([]);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [menuOpened, setMenuOpened] = useState(false);
   const [activeModelIds, setActiveModelIds] = useState<string[]>([]);
 
   const [globalConfig, setGlobalConfig] = useState<GlobalConfig>(() => {
@@ -106,8 +108,6 @@ export default function App() {
   });
 
   const [dateRange, setDateRange] = useState(() => calculateRange(globalConfig));
-  const [settingsOpen, setSettingsOpen] = useState(false);
-
   useEffect(() => {
     localStorage.setItem('globalConfig', JSON.stringify(globalConfig));
     // When config changes, we might want to refresh the dateRange if it's "now" based
@@ -179,10 +179,24 @@ export default function App() {
 
 
   const handleClearSelection = useCallback(() => setSelectedNodes([]), []);
-  const handleNodeSearchSelect = useCallback((node: Node) => {
-    setSelectedNodes([node]);
+  const handleSearchSelect = useCallback((item: Node | Edge) => {
+    if ('type' in item) {
+      // Node selected
+      setSelectedNodes([item]);
+      setHighlightedNodes(new Set([item.id]));
+      setHighlightedEdges(new Set());
+    } else {
+      // Edge selected
+      const source = nodes.find(n => n.id === item.source);
+      const target = nodes.find(n => n.id === item.target);
+      if (source && target) {
+        setSelectedNodes([source, target]);
+        setHighlightedNodes(new Set([source.id, target.id]));
+        setHighlightedEdges(new Set([item.id || `${item.source}-${item.target}`]));
+      }
+    }
     setFitBoundsTrigger(prev => prev + 1);
-  }, []);
+  }, [nodes]);
   const isMobile = useMediaQuery('(max-width: 768px)');
 
   const onNodeClick = useCallback((node: Node, multiSelect: boolean) => {
@@ -573,38 +587,46 @@ export default function App() {
           />
 
           {/* Floating Action Button and Analysis Toolbar */}
-          <Box style={{ position: 'absolute', top: 20, right: 20, zIndex: 100 }}>
-            <Stack align="flex-end" gap="sm">
-              <Group gap="sm">
+          <Box style={{ position: 'absolute', top: 20, right: 20, zIndex: 100, pointerEvents: 'none' }}>
+            <Stack align="flex-end" gap="sm" style={{ pointerEvents: 'none' }}>
+              <Group gap="xs" wrap="nowrap" justify="flex-end" style={{ pointerEvents: 'auto' }}>
+                <GlobalSearch nodes={nodes} edges={edges} onSearchSelect={handleSearchSelect} isMobile={isMobile} />
+
+                <ModelSwitcher onModelsChange={handleModelsChange} />
+
                 <Tooltip label="Global Settings" position="bottom" withArrow>
                   <ActionIcon
                     variant="filled"
-                    color="blue"
+                    color={settingsOpen ? "blue" : "gray"}
                     size="xl"
                     radius="md"
                     onClick={(e) => {
+                      console.log('Settings clicked');
                       e.stopPropagation();
                       setSettingsOpen(true);
                     }}
                     style={{
                       boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
                       border: '1px solid rgba(255,255,255,0.1)',
-                      pointerEvents: 'auto'
                     }}
                   >
                     <Settings size={20} />
                   </ActionIcon>
                 </Tooltip>
 
-                <GlobalSearch nodes={nodes} onNodeSelect={handleNodeSearchSelect} />
-
-                <ModelSwitcher onModelsChange={handleModelsChange} />
-
-                <Menu shadow="md" width={200} position="bottom-end" withArrow offset={10}>
+                <Menu 
+                  shadow="md" 
+                  width={200} 
+                  position="bottom-end" 
+                  withArrow 
+                  offset={10}
+                  opened={menuOpened}
+                  onChange={setMenuOpened}
+                >
                   <Menu.Target>
                     <ActionIcon
                       variant="filled"
-                      color="dark"
+                      color={menuOpened ? "blue" : "gray"}
                       size="xl"
                       radius="md"
                       style={{

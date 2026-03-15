@@ -1,23 +1,36 @@
 import { useState, useMemo } from 'react';
-import { Select, Group, Text, Box } from '@mantine/core';
+import { Select, Group, Text, Box, ActionIcon, Popover, Tooltip } from '@mantine/core';
 import { Search } from 'lucide-react';
-import type { Node } from '../../../shared/types';
+import type { Node, Edge } from '../../../shared/types';
 
 interface GlobalSearchProps {
   nodes: Node[];
-  onNodeSelect: (node: Node) => void;
+  edges: Edge[];
+  onSearchSelect: (item: Node | Edge) => void;
+  isMobile?: boolean;
 }
 
-export function GlobalSearch({ nodes, onNodeSelect }: GlobalSearchProps) {
+export function GlobalSearch({ nodes, edges, onSearchSelect, isMobile }: GlobalSearchProps) {
   const [searchValue, setSearchValue] = useState('');
+  const [opened, setOpened] = useState(false);
 
   const searchData = useMemo(() => {
-    return nodes.map(node => ({
+    const nodeItems = nodes.map(node => ({
         value: node.id,
         label: `${node.name || node.id}`,
-        node: node
+        type: 'node' as const,
+        item: node
     }));
-  }, [nodes]);
+
+    const edgeItems = edges.map(edge => ({
+        value: edge.id || `${edge.source}-${edge.target}`,
+        label: `${nodes.find(n => n.id === edge.source)?.name || edge.source} → ${nodes.find(n => n.id === edge.target)?.name || edge.target}`,
+        type: 'edge' as const,
+        item: edge
+    }));
+
+    return [...nodeItems, ...edgeItems];
+  }, [nodes, edges]);
 
   // Simple fuzzy filter: matches if query is a substring of name or ID (case-insensitive)
   const filteredData = useMemo(() => {
@@ -31,7 +44,7 @@ export function GlobalSearch({ nodes, onNodeSelect }: GlobalSearchProps) {
       .slice(0, 20); // Limit results for performance and UI
   }, [searchData, searchValue]);
 
-  return (
+  const selectElement = (
     <Select
       placeholder="Search nodes..."
       leftSection={<Search size={16} />}
@@ -40,16 +53,19 @@ export function GlobalSearch({ nodes, onNodeSelect }: GlobalSearchProps) {
       onSearchChange={setSearchValue}
       onChange={(value) => {
         if (value) {
-          const selected = nodes.find(n => n.id === value);
-          if (selected) onNodeSelect(selected);
+          const selected = searchData.find(item => item.value === value);
+          if (selected) onSearchSelect(selected.item);
           setSearchValue(''); // Clear search after selection
+          setOpened(false); // Close popover on selection
         }
       }}
       searchable
       nothingFoundMessage="No nodes found"
       maxDropdownHeight={300}
+      autoFocus={isMobile}
+      comboboxProps={{ withinPortal: true, zIndex: 1000 }}
       styles={{
-        root: { width: 300 },
+        root: { width: isMobile ? 'calc(100vw - 120px)' : 300 },
         input: {
           backgroundColor: 'rgba(26, 27, 30, 0.7)',
           backdropFilter: 'blur(10px)',
@@ -72,7 +88,8 @@ export function GlobalSearch({ nodes, onNodeSelect }: GlobalSearchProps) {
         }
       }}
       renderOption={({ option }) => {
-        const node = (option as any).node as Node;
+        const item = (option as any).item;
+        const type = (option as any).type;
         return (
           <Group gap="sm">
             <Box>
@@ -80,7 +97,7 @@ export function GlobalSearch({ nodes, onNodeSelect }: GlobalSearchProps) {
                 {option.label}
               </Text>
               <Text size="xs" c="dimmed">
-                ID: {option.value} • {node?.type}
+                {type === 'node' ? `ID: ${option.value} • ${item?.type}` : `ID: ${option.value} • Edge`}
               </Text>
             </Box>
           </Group>
@@ -88,4 +105,48 @@ export function GlobalSearch({ nodes, onNodeSelect }: GlobalSearchProps) {
       }}
     />
   );
+
+  if (isMobile) {
+    return (
+      <Popover 
+        opened={opened} 
+        onChange={setOpened} 
+        width={320}
+        position="bottom-end" 
+        shadow="md"
+        offset={10}
+      >
+        <Popover.Target>
+          <Tooltip label="Search Map" position="bottom" withArrow>
+            <ActionIcon
+              variant="filled"
+              color={opened ? "blue" : "gray"}
+              size="xl"
+              radius="md"
+              onClick={() => setOpened(o => !o)}
+              style={{
+                boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                border: '1px solid rgba(255,255,255,0.1)',
+              }}
+            >
+              <Search size={20} />
+            </ActionIcon>
+          </Tooltip>
+        </Popover.Target>
+        <Popover.Dropdown 
+          bg="rgba(26, 27, 30, 0.95)" 
+          style={{ 
+            backdropFilter: 'blur(10px)', 
+            border: '1px solid rgba(255,255,255,0.1)', 
+            padding: '12px',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.4)'
+          }}
+        >
+          {selectElement}
+        </Popover.Dropdown>
+      </Popover>
+    );
+  }
+
+  return selectElement;
 }

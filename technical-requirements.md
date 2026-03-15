@@ -1,7 +1,8 @@
 # Technical Requirements: Grid-Scale Analytical Agent
 
 ## 1. Architecture & Design
-* **Vertical Slice Architecture**: Organize code by feature (vertical slices) rather than technical layers. A single file NEVER handles more than one responsibility.
+* **Architecture**: Organize code by feature (vertical slices) rather than technical layers. A single file NEVER handles more than one responsibility.
+* **Responsiveness**: All overlays and analytical windows must support mobile viewports (minimum 320px width) without horizontal scrolling. Draggable/resizable windows must be clamped to the viewport bounds.
 * **File Structure**: Must propose a file structure following Vertical Slice Architecture before writing any code.
 
 ## 2. Infrastructure & Data Storage

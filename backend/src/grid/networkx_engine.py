@@ -142,3 +142,7 @@ class NetworkXEngine(GraphEngine):
                         queue.append((neighbor, depth + 1))
                         
         return list(nodes), list(edges)
+
+    def get_node_phases(self, node_ids: List[str]) -> dict[str, List[str]]:
+        """Returns a mapping of node IDs to their phase lists."""
+        return {nid: self.nodes[nid].phases for nid in node_ids if nid in self.nodes}

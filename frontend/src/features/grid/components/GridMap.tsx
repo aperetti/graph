@@ -277,7 +277,7 @@ export const GridMap = React.memo<GridMapProps>(({
         new ScatterplotLayer({
             id: 'grid-nodes',
             data: nodes.filter(n => {
-                if (n.type === 'Switch' || n.type === 'Breaker' || n.type === 'Transformer') return false;
+                if (n.type === 'Switch' || n.type === 'Breaker' || n.type === 'Transformer' || n.type === 'Bus') return false;
                 // Hide buses that overlap completely with switches/breakers
                 const posKey = `${n.position[0].toFixed(6)},${n.position[1].toFixed(6)}`;
                 if (switchPositions.has(posKey)) return false;
@@ -410,7 +410,7 @@ export const GridMap = React.memo<GridMapProps>(({
             getIcon: () => 'marker',
             getSize: (d: Node) => {
                 const isSelected = selectedNodeIdsSet.has(d.id);
-                return isSelected ? 9 : 8;
+                return isSelected ? 20 : 16;
             },
             sizeScale: Math.pow(1.5, (viewState.zoom || 14) - 14),
             sizeMinPixels: 1,
@@ -472,7 +472,7 @@ export const GridMap = React.memo<GridMapProps>(({
                                 <div style="padding: 10px; background: #25262b; border: 1px solid #373A40; border-radius: 8px; color: #fff;">
                                 <strong>ID:</strong> ${object.id}<br/>
                                 <strong>Type:</strong> ${object.type}<br/>
-                                <strong>Name:</strong> ${object.name}${object.transformer_kva ? `<br/><strong>Transformer Size:</strong> ${object.transformer_kva} kVA` : ''}
+                                <strong>Name:</strong> ${object.name}${object.transformer_kva ? `<br/><strong>Transformer Size:</strong> ${typeof object.transformer_kva === 'number' ? object.transformer_kva.toFixed(1) : object.transformer_kva} kVA` : ''}
                                 </div>
                             `,
                                 style: { backgroundColor: 'transparent', fontSize: '13px' }

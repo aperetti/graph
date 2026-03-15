@@ -2,12 +2,16 @@ import { memo, useState, useMemo, useEffect } from 'react';
 import { Group, Box, Text, Stack, Select, Slider, SimpleGrid, Button, Paper } from '@mantine/core';
 import { AlertTriangle, Clock, Activity } from 'lucide-react';
 import ReactECharts from 'echarts-for-react';
+import * as echarts from 'echarts';
 import { ScadaLoadingAnimation } from '../../../components/ScadaLoadingAnimation';
 import { AnalysisWindow } from './AnalysisWindow';
 
 interface ReadingData {
     timestamp: string;
     kwh_delivered: number | null;
+    kwh_a: number | null;
+    kwh_b: number | null;
+    kwh_c: number | null;
     temperature: number | null;
 }
 
@@ -188,14 +192,36 @@ export const ConsumptionTimeSeriesModal = memo(function ConsumptionTimeSeriesMod
         const spanDays = (last - first) / (1000 * 60 * 60 * 24);
 
         if (spanDays <= 90) {
-            return data.map((d, i) => [new Date(d.timestamp).getTime(), d.kwh_delivered, smoothedTemperatures[i]]);
+            return data.map((d, i) => {
+                const ka = d.kwh_a || 0;
+                const kb = d.kwh_b || 0;
+                const kc = d.kwh_c || 0;
+                
+                // Symmetrical component S2 magnitude (imbalance)
+                const real = ka - 0.5 * kb - 0.5 * kc;
+                const imag = 0.866 * (kb - kc);
+                const s2 = Math.sqrt(real * real + imag * imag) / 3;
+
+                return [
+                    new Date(d.timestamp).getTime(), 
+                    d.kwh_delivered, 
+                    smoothedTemperatures[i],
+                    ka,
+                    kb,
+                    kc,
+                    s2
+                ];
+            });
         }
 
         const bucketHours = spanDays > 365 ? 3 : 1;
         const bucketMs = bucketHours * 60 * 60 * 1000;
-        const aggregated: [number, number | null, number | null][] = [];
+        const aggregated: [number, number | null, number | null, number, number, number, number][] = [];
         let curKwh: number[] = [];
         let curTemp: number[] = [];
+        let curKa: number[] = [];
+        let curKb: number[] = [];
+        let curKc: number[] = [];
         let bucketStartTime = Math.floor(first / bucketMs) * bucketMs;
 
         data.forEach((d, i) => {
@@ -204,22 +230,44 @@ export const ConsumptionTimeSeriesModal = memo(function ConsumptionTimeSeriesMod
             if (time < bucketStartTime + bucketMs) {
                 if (d.kwh_delivered != null) curKwh.push(d.kwh_delivered);
                 if (sTemp != null) curTemp.push(sTemp);
+                if (d.kwh_a != null) curKa.push(d.kwh_a);
+                if (d.kwh_b != null) curKb.push(d.kwh_b);
+                if (d.kwh_c != null) curKc.push(d.kwh_c);
             } else {
-                if (curKwh.length > 0 || curTemp.length > 0) {
+                if (curKwh.length > 0 || curTemp.length > 0 || curKa.length > 0) {
                     const avgKwh = curKwh.length > 0 ? curKwh.reduce((a, b) => a + b, 0) / curKwh.length : null;
                     const avgTemp = curTemp.length > 0 ? curTemp.reduce((a, b) => a + b, 0) / curTemp.length : null;
-                    aggregated.push([bucketStartTime, avgKwh, avgTemp]);
+                    const avgKa = curKa.length > 0 ? curKa.reduce((a, b) => a + b, 0) / curKa.length : 0;
+                    const avgKb = curKb.length > 0 ? curKb.reduce((a, b) => a + b, 0) / curKb.length : 0;
+                    const avgKc = curKc.length > 0 ? curKc.reduce((a, b) => a + b, 0) / curKc.length : 0;
+                    
+                    const real = avgKa - 0.5 * avgKb - 0.5 * avgKc;
+                    const imag = 0.866 * (avgKb - avgKc);
+                    const s2 = Math.sqrt(real * real + imag * imag) / 3;
+
+                    aggregated.push([bucketStartTime, avgKwh, avgTemp, avgKa, avgKb, avgKc, s2]);
                 }
                 bucketStartTime = Math.floor(time / bucketMs) * bucketMs;
                 curKwh = d.kwh_delivered != null ? [d.kwh_delivered] : [];
                 curTemp = sTemp != null ? [sTemp] : [];
+                curKa = d.kwh_a != null ? [d.kwh_a] : [];
+                curKb = d.kwh_b != null ? [d.kwh_b] : [];
+                curKc = d.kwh_c != null ? [d.kwh_c] : [];
             }
         });
 
-        if (curKwh.length > 0 || curTemp.length > 0) {
+        if (curKwh.length > 0 || curTemp.length > 0 || curKa.length > 0) {
             const avgKwh = curKwh.length > 0 ? curKwh.reduce((a, b) => a + b, 0) / curKwh.length : null;
             const avgTemp = curTemp.length > 0 ? curTemp.reduce((a, b) => a + b, 0) / curTemp.length : null;
-            aggregated.push([bucketStartTime, avgKwh, avgTemp]);
+            const avgKa = curKa.length > 0 ? curKa.reduce((a, b) => a + b, 0) / curKa.length : 0;
+            const avgKb = curKb.length > 0 ? curKb.reduce((a, b) => a + b, 0) / curKb.length : 0;
+            const avgKc = curKc.length > 0 ? curKc.reduce((a, b) => a + b, 0) / curKc.length : 0;
+
+            const real = avgKa - 0.5 * avgKb - 0.5 * avgKc;
+            const imag = 0.866 * (avgKb - avgKc);
+            const s2 = Math.sqrt(real * real + imag * imag) / 3;
+
+            aggregated.push([bucketStartTime, avgKwh, avgTemp, avgKa, avgKb, avgKc, s2]);
         }
 
         return aggregated;
@@ -433,8 +481,18 @@ export const ConsumptionTimeSeriesModal = memo(function ConsumptionTimeSeriesMod
                                     },
                                     grid: { left: 40, right: 40, bottom: 35, top: 45, containLabel: true },
                                     dataZoom: [
-                                        { type: 'inside', start: 0, end: 100 },
-                                        { type: 'slider', start: 0, end: 100, height: 15, bottom: 10, textStyle: { color: '#A6A7AB' }, borderColor: '#373A40', fillerColor: 'rgba(51, 154, 240, 0.2)' }
+                                        { type: 'inside', start: 0, end: 100, xAxisIndex: 0 },
+                                        { 
+                                            type: 'slider', 
+                                            start: 0, 
+                                            end: 100, 
+                                            height: 15, 
+                                            bottom: 10, 
+                                            textStyle: { color: '#A6A7AB' }, 
+                                            borderColor: '#373A40', 
+                                            fillerColor: 'rgba(51, 154, 240, 0.2)',
+                                            xAxisIndex: 0
+                                        }
                                     ],
                                     xAxis: {
                                         type: 'time',
@@ -498,6 +556,104 @@ export const ConsumptionTimeSeriesModal = memo(function ConsumptionTimeSeriesMod
                                             lineStyle: { width: 1, opacity: 0.5 }
                                         }
                                     ]
+                                }}
+                                onChartReady={(chart) => {
+                                    chart.group = 'consumption-sync';
+                                    echarts.connect('consumption-sync');
+                                }}
+                            />
+                        </Box>
+
+                        <Box style={{ height: 320, border: '1px solid rgba(51, 154, 240, 0.1)', borderRadius: '8px', padding: '12px', backgroundColor: 'rgba(26, 27, 30, 0.2)' }}>
+                            <Text size="xs" fw={700} c="dimmed" mb={8} ta="center" style={{ letterSpacing: '0.5px' }}>PHASE_LOADING_&_ENERGY_IMBALANCE (|S₂|)</Text>
+                            <ReactECharts
+                                style={{ height: 260, width: '100%' }}
+                                option={{
+                                    tooltip: {
+                                        trigger: 'axis',
+                                        backgroundColor: 'rgba(26, 27, 30, 0.95)',
+                                        borderColor: '#373A40',
+                                        textStyle: { color: '#C1C2C5', fontSize: 11, fontFamily: 'monospace' },
+                                        formatter: (params: any) => {
+                                            let res = `<div style="font-weight: bold; margin-bottom: 4px; border-bottom: 1px solid #373A40; padding-bottom: 2px;">${new Date(params[0].value[0]).toISOString()}</div>`;
+                                            params.forEach((p: any) => {
+                                                const val = Math.abs(p.value[1]).toFixed(3);
+                                                res += `<div style="display: flex; justify-content: space-between; gap: 8px;">
+                                                    <span style="color: ${p.color};">■</span> ${p.seriesName}: 
+                                                    <span style="font-weight: bold;">${val} kWh</span>
+                                                </div>`;
+                                            });
+                                            return res;
+                                        }
+                                    },
+                                    legend: {
+                                        data: ['Phase A', 'Phase B', 'Phase C', 'Imbalance (|S₂|)'],
+                                        textStyle: { color: '#A6A7AB', fontSize: 10, fontFamily: 'monospace' },
+                                        top: 0
+                                    },
+                                    grid: { left: 45, right: 15, bottom: 25, top: 40, containLabel: true },
+                                    xAxis: {
+                                        type: 'time',
+                                        axisLabel: { color: '#A6A7AB', fontSize: 10, fontFamily: 'monospace' },
+                                        axisLine: { lineStyle: { color: '#373A40' } },
+                                        splitLine: { show: true, lineStyle: { color: 'rgba(55, 58, 64, 0.3)', type: 'dashed' } }
+                                    },
+                                    dataZoom: [
+                                        { type: 'inside', start: 0, end: 100, xAxisIndex: 0 },
+                                        { 
+                                            type: 'slider', 
+                                            start: 0, 
+                                            end: 100, 
+                                            height: 15, 
+                                            bottom: 10, 
+                                            textStyle: { color: '#A6A7AB' }, 
+                                            borderColor: '#373A40', 
+                                            fillerColor: 'rgba(51, 154, 240, 0.2)',
+                                            xAxisIndex: 0
+                                        }
+                                    ],
+                                    yAxis: {
+                                        type: 'value',
+                                        name: 'kWh',
+                                        nameTextStyle: { color: '#A6A7AB', fontSize: 10, fontFamily: 'monospace' },
+                                        axisLabel: { color: '#A6A7AB', fontSize: 10, fontFamily: 'monospace' },
+                                        splitLine: { lineStyle: { color: '#25262B' } },
+                                        zeroGuideline: { show: true, lineStyle: { color: '#A6A7AB', type: 'solid', width: 1 } }
+                                    },
+                                    series: [
+                                        { 
+                                            name: 'Phase A', type: 'line', data: timeSeriesData.map(d => [d[0], d[3]]), 
+                                            smooth: true, showSymbol: false, itemStyle: { color: '#fa5252' }, lineStyle: { width: 1.5 } 
+                                        },
+                                        { 
+                                            name: 'Phase B', type: 'line', data: timeSeriesData.map(d => [d[0], d[4]]), 
+                                            smooth: true, showSymbol: false, itemStyle: { color: '#40c057' }, lineStyle: { width: 1.5 } 
+                                        },
+                                        { 
+                                            name: 'Phase C', type: 'line', data: timeSeriesData.map(d => [d[0], d[5]]), 
+                                            smooth: true, showSymbol: false, itemStyle: { color: '#339af0' }, lineStyle: { width: 1.5 } 
+                                        },
+                                        { 
+                                            name: 'Imbalance (|S₂|)', 
+                                            type: 'line', 
+                                            data: timeSeriesData.map(d => [d[0], -(d[6] || 0)]), 
+                                            smooth: true, 
+                                            showSymbol: false, 
+                                            itemStyle: { color: '#ffd43b' },
+                                            lineStyle: { width: 2 },
+                                            areaStyle: {
+                                                opacity: 0.15,
+                                                color: {
+                                                    type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+                                                    colorStops: [{ offset: 0, color: 'rgba(255, 212, 59, 0)' }, { offset: 1, color: 'rgba(255, 212, 59, 0.3)' }]
+                                                }
+                                            }
+                                        }
+                                    ]
+                                }}
+                                onChartReady={(chart) => {
+                                    chart.group = 'consumption-sync';
+                                    echarts.connect('consumption-sync');
                                 }}
                             />
                         </Box>

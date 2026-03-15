@@ -62,25 +62,50 @@ class CalculateAggregateConsumptionUseCase:
                 all_downstream_edges.update(edges)
         
         nodes_to_query = list(all_downstream_nodes)
+        node_phases = self.graph_engine.get_node_phases(nodes_to_query)
+        
+        # Build weight mapping for phase aggregation
+        weight_values = []
+        for nid in nodes_to_query:
+            p_raw = node_phases.get(nid, ["A", "B", "C"]) or ["A", "B", "C"]
+            # Only count phases we display (A, B, C) for energy balance in the graph
+            p_list = [p for p in p_raw if p in ("A", "B", "C")]
+            
+            w = {"A": 0.0, "B": 0.0, "C": 0.0}
+            if p_list:
+                share = 1.0 / len(p_list)
+                for p in p_list:
+                    w[p] = share
+            else:
+                # Fallback for nodes with no A/B/C phases (e.g. S1/S2 or Neutral only)
+                # Split evenly to ensure total energy remains correct in the aggregate time-series.
+                # 0.3333333333333333 * 3 = 1.0 (Python float precision handles this well)
+                w = {"A": 1.0/3.0, "B": 1.0/3.0, "C": 1.0/3.0}
+            
+            weight_values.append(f"('{nid}', {w['A']}, {w['B']}, {w['C']})")
+
+        values_clause = ",".join(weight_values)
         placeholders = ",".join(["?"] * len(nodes_to_query))
         query_params = nodes_to_query + [start_time, end_time]
         
         query = f"""
+            WITH phase_weights(node_id, wa, wb, wc) AS (
+                VALUES {values_clause}
+            )
             SELECT 
                 r.timestamp,
                 SUM(COALESCE(r.kwh_dlv, 0)) as total_kwh_dlv,
-                SUM(COALESCE(r.current_a, 0) + COALESCE(r.current_b, 0) + COALESCE(r.current_c, 0)) as total_current,
-                MEDIAN(r.voltage_a) as median_volts_a,
-                MEDIAN(r.voltage_b) as median_volts_b,
-                MEDIAN(r.voltage_c) as median_volts_c,
+                SUM(COALESCE(r.kwh_dlv, 0) * pw.wa) as kwh_a,
+                SUM(COALESCE(r.kwh_dlv, 0) * pw.wb) as kwh_b,
+                SUM(COALESCE(r.kwh_dlv, 0) * pw.wc) as kwh_c,
                 MAX(w.temperature) as temperature
             FROM read_parquet('{self.parquet_dir}/*.parquet') r
+            JOIN phase_weights pw ON r.node_id = pw.node_id
             LEFT JOIN weather_recordings w 
                 ON w.month = EXTRACT(month FROM r.timestamp)
                 AND w.day = EXTRACT(day FROM r.timestamp)
                 AND w.hour = EXTRACT(hour FROM r.timestamp)
-            WHERE r.node_id IN ({placeholders})
-              AND r.timestamp >= CAST(? AS TIMESTAMP)
+            WHERE r.timestamp >= CAST(? AS TIMESTAMP)
               AND r.timestamp <= CAST(? AS TIMESTAMP)
             GROUP BY r.timestamp
             ORDER BY r.timestamp ASC
@@ -88,17 +113,16 @@ class CalculateAggregateConsumptionUseCase:
         
         try:
             with duckdb.connect(self.db_path, read_only=True) as conn:
-                results = conn.execute(query, query_params).fetchall()
+                results = conn.execute(query, [start_time, end_time]).fetchall()
                 
             time_series = [
                 {
                     "timestamp": row[0].isoformat() + "Z",
                     "kwh_delivered": float(row[1]),
-                    "total_current": float(row[2]),
-                    "median_voltage_a": float(row[3]) if row[3] else 0,
-                    "median_voltage_b": float(row[4]) if row[4] else 0,
-                    "median_voltage_c": float(row[5]) if row[5] else 0,
-                    "temperature": float(row[6]) if row[6] else 0
+                    "kwh_a": float(row[2]),
+                    "kwh_b": float(row[3]),
+                    "kwh_c": float(row[4]),
+                    "temperature": float(row[5]) if row[5] else 0
                 }
                 for row in results
             ]

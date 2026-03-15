@@ -34,4 +34,5 @@
 * **Distribution Histograms**: To visualize the "spread" of voltage across a circuit.
 * **Time-Series Charts**: Overlaying multiple meters or aggregated circuit loads to find correlations.
   * Must support filtering by predefined time ranges: Last Week (1W), Last Month (1M), and Last Year (1Y).
-  * The consumption view must be split vertically (50/50 layout): one graph for kWh (delivered/received) and another for Voltage, while maintaining the same total panel height.
+  * The consumption view must be split vertically: one graph for total kWh, one for Phase Loading (A, B, C) and Energy Imbalance (|S₂|), and another for Voltage, while maintaining the same total panel height.
+  * The Energy Imbalance (|S₂|) must be calculated using symmetrical components based on phase-weighted consumption and plotted on a negative y-axis for visual contrast.

@@ -21,7 +21,14 @@ export interface ConsumptionResponse {
     downstream_node_ids: string[];
     downstream_edge_ids: string[];
     estimated_rows: number;
-    time_series: any[];
+    time_series: {
+        timestamp: string;
+        kwh_delivered: number;
+        kwh_a: number;
+        kwh_b: number;
+        kwh_c: number;
+        temperature: number;
+    }[];
 }
 
 export interface VoltageDistributionResponse {

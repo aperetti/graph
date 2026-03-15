@@ -19,7 +19,9 @@
 *   **Backend (FastAPI & Data Ingestion)**:
     *   **Data Ingestion (CIM):** The CIM ingestor must effectively extract robust asset taxonomy, correctly tagging `Substation`, `Breaker`, `Switch`, `Transformer`, and `Meter` types. Determine the switch 'open' status for visualizations.
     *   **Graph Export Endpoint:** An endpoint to export the full grid (or a simplified version) as JSON (nodes and links) for the frontend visualization library.
-    *   **Time Series Endpoints:** Endpoints to fetch consumption metrics must support dynamic start/end ISO strings to fulfill UI ranges (1W, 1M, 1Y).
+    *   **Time Series Endpoints:** Endpoints to fetch consumption metrics must support dynamic start/end ISO strings and perform phase-weighted aggregation using node phasing attributes.
+    *   **Phase Aggregation Logic**: Multi-phase loads are assumed to be balanced. Aggregation must use a weight-based join: `SUM(kwh_dlv * weight_p)` where `weight_p` is `1.0 / count(display_phases)` for each phase present on the node (where display_phases are A, B, or C). If no A, B, or C phases are present, split equally across all three.
+    *   **Imbalance Calculation**: Calculate the Negative Sequence Component magnitude ($|S_2|$) using: $|S_2| = \frac{1}{3} \sqrt{(kwh_a - 0.5 \cdot kwh_b - 0.5 \cdot kwh_c)^2 + (0.866 \cdot (kwh_b - kwh_c))^2}$.
     *   Existing Endpoints: Re-use `/api/analytics/phase-balance/{node_id}` to calculate the downstream aggregations upon node click.
     *   **Synthetic AMI Generation:** Generate synthetic AMI time-series metrics traversing from 2025 through 2027.
     *   **Alarms Dataset Integration**:

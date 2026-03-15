@@ -73,7 +73,7 @@ def _mrid_str(obj) -> Optional[str]:
     for prefix in ("urn:uuid:", "_"):
         if s.startswith(prefix):
             s = s[len(prefix):]
-    return s
+    return s.upper()
 
 
 def _get_name(obj) -> str:
@@ -151,6 +151,7 @@ class CimModelManager:
         self._cn_equipment: dict[str, list] = defaultdict(list)  # cn mRID → [eq mRID]
         self._eq_phases: dict[str, list[str]] = {}               # eq mRID → ["A","B",…]
         self._transformer_kva: dict[str, float] = {}             # PowerTransformer mRID → KVA
+        self._transformer_primary_cn: dict[str, str] = {}        # PowerTransformer mRID → Primary CN mRID
 
         # ── Pre-computed topology ─────────────────────────────────
         self._topology_nodes: list[dict] = []
@@ -205,6 +206,30 @@ class CimModelManager:
         xml_file = XMLFile(filename=str(path))
         self.network = FeederModel(container=cim.Feeder(), connection=xml_file)
 
+        # ── Load equipment catalog/ratings (not typically in feeder container) ──
+        # We manually fetch these into the graph
+        logger.info("Loading transformer and equipment catalog...")
+        for cls_type in [
+            getattr(cim, "TransformerTankInfo", None),
+            getattr(cim, "TransformerEndInfo", None), 
+            getattr(cim, "PowerTransformerInfo", None),
+            getattr(cim, "Asset", None),
+            getattr(cim, "AssetInfo", None),
+            getattr(cim, "PowerTransformer", None),
+            getattr(cim, "PowerTransformerEnd", None),
+            getattr(cim, "TransformerTank", None),
+            getattr(cim, "TransformerTankEnd", None)
+        ]:
+            if cls_type:
+                logger.info("  Fetching %s...", cls_type.__name__)
+                self.network.get_all_attributes(cls_type)
+
+        # ── Manual XML Scan for missing linkages (Plan B) ──
+        # cimgraph often fails to parse catalog linkages in large files
+        self._manual_tank_to_info: dict[str, str] = {}
+        self._manual_info_to_kva: dict[str, float] = {}
+        self._manual_xml_catalog_scan(path)
+
         logger.info("CIM classes loaded:")
         for cls, objs in sorted(self.network.graph.items(), key=lambda x: x[0].__name__):
             if objs:
@@ -218,9 +243,78 @@ class CimModelManager:
             len(self._topology_edges),
         )
 
+    def _manual_xml_catalog_scan(self, path: Path):
+        """Streaming parse of CIM XML to find manual linkages."""
+        import xml.etree.ElementTree as ET
+        
+        logger.info("  [Manual Scan] Scanning %s for linkages...", path.name)
+        
+        try:
+            # We use iterparse for memory efficiency on large files
+            context = ET.iterparse(str(path), events=('start', 'end'))
+            _, root = next(context)
+            
+            curr_tank_mrid = None
+            curr_info_mrid = None
+            curr_end_info_mrid = None
+            
+            tank_count = 0
+            rating_count = 0
+            
+            for event, elem in context:
+                tag = elem.tag.split('}')[-1] # Remove namespace
+                
+                if event == 'start':
+                    # Capture mRIDs when we enter tags
+                    if tag == 'TransformerTank':
+                        m = elem.get('{http://www.w3.org/1999/02/22-rdf-syntax-ns#}ID') or \
+                            elem.get('{http://www.w3.org/1999/02/22-rdf-syntax-ns#}about')
+                        if m: 
+                            if m.startswith('urn:uuid:'): m = m[9:]
+                            curr_tank_mrid = m.upper()
+                    elif tag == 'TransformerEndInfo':
+                        m = elem.get('{http://www.w3.org/1999/02/22-rdf-syntax-ns#}ID') or \
+                            elem.get('{http://www.w3.org/1999/02/22-rdf-syntax-ns#}about')
+                        if m:
+                            if m.startswith('urn:uuid:'): m = m[9:]
+                            curr_end_info_mrid = m.upper()
+                            
+                elif event == 'end':
+                    # Extract attributes or linkages
+                    if tag == 'TransformerTank.TransformerTankInfo':
+                        res = elem.get('{http://www.w3.org/1999/02/22-rdf-syntax-ns#}resource')
+                        if curr_tank_mrid and res:
+                            if res.startswith('urn:uuid:'): res = res[9:]
+                            self._manual_tank_to_info[curr_tank_mrid] = res.upper()
+                            tank_count += 1
+                    elif tag == 'TransformerEndInfo.ratedS':
+                        if curr_end_info_mrid and elem.text:
+                            try:
+                                self._manual_info_to_kva[curr_end_info_mrid] = float(elem.text)
+                                rating_count += 1
+                            except: pass
+                    elif tag == 'TransformerEndInfo.TransformerTankInfo':
+                        res = elem.get('{http://www.w3.org/1999/02/22-rdf-syntax-ns#}resource')
+                        if curr_end_info_mrid and res:
+                            if res.startswith('urn:uuid:'): res = res[9:]
+                            kva = self._manual_info_to_kva.get(curr_end_info_mrid)
+                            if kva:
+                                # Map rating from EndInfo to TankInfo mRID
+                                self._manual_info_to_kva[res.upper()] = kva
+                    
+                    if tag == 'TransformerTank': curr_tank_mrid = None
+                    if tag == 'TransformerEndInfo': curr_end_info_mrid = None
+                    
+                    root.clear() # Memory optimization
+            
+            logger.info("  [Manual Scan] Completed: %d tank links, %d ratings found", tank_count, len(self._manual_info_to_kva))
+        except Exception as e:
+            logger.error("  [Manual Scan] Failed: %s", e)
+
     # ══════════════════════════════════════════════════════════════
     # Index construction (private)
     # ══════════════════════════════════════════════════════════════
+    # ... (skipping ahead to the rating extraction logic inside _build_indexes)
 
     def _build_indexes(self):
         cim = self.cim
@@ -315,7 +409,7 @@ class CimModelManager:
             cim.LoadBreakSwitch, cim.EnergyConsumer, cim.EnergySource,
         ]
         for opt in ("Fuse", "Disconnector", "Recloser", "Substation",
-                     "LinearShuntCompensator"):
+                     "LinearShuntCompensator", "TransformerTank"):
             cls = getattr(cim, opt, None)
             if cls:
                 eq_cls_with_location.append(cls)
@@ -349,6 +443,11 @@ class CimModelManager:
             cim.EnergyConsumer: "EnergyConsumer",
             cim.EnergySource: "EnergySource",
         }
+        # Distribution-level tanks common in IEEE 8500
+        tt_cls = getattr(cim, "TransformerTank", None)
+        if tt_cls:
+            type_map[tt_cls] = "PowerTransformer"
+
         for opt_name, type_str in [
             ("Fuse", "Fuse"),
             ("Disconnector", "Disconnector"),
@@ -391,7 +490,6 @@ class CimModelManager:
 
         # (phase_class, parent_attr_name)
         phase_class_map: list[tuple] = []
-
         for cls_name, parent_attr in [
             ("ACLineSegmentPhase",    "ACLineSegment"),
             ("EnergyConsumerPhase",   "EnergyConsumer"),
@@ -431,10 +529,11 @@ class CimModelManager:
     # ── PowerTransformer KVA Index ──────────────────────────────
 
     def _build_transformer_index(self):
-        """Map PowerTransformer mRIDs to their nominal KVA rating."""
+        """Builds an index of transformer kVA ratings, with robust linkage fallbacks."""
         cim = self.cim
         graph = self.network.graph
 
+        # ── 1. PowerTransformerEnd (Transmission/Substation level) ──
         pte_cls = getattr(cim, "PowerTransformerEnd", None)
         if pte_cls:
             for _eid, pte in graph.get(pte_cls, {}).items():
@@ -443,10 +542,87 @@ class CimModelManager:
                 if pt_mrid:
                     va = _safe_float(getattr(pte, "ratedS", None))
                     if va:
-                        kva = va / 1000.0
-                        # Capture the maximum rating among windings (usually identical)
                         current = self._transformer_kva.get(pt_mrid, 0.0)
-                        self._transformer_kva[pt_mrid] = max(current, kva)
+                        self._transformer_kva[pt_mrid] = max(current, va / 1000.0)
+                    
+                    # Identify the primary connectivity node (End 1)
+                    if getattr(pte, "endNumber", None) == 1:
+                        term = getattr(pte, "Terminal", None)
+                        if term:
+                            cn = getattr(term, "ConnectivityNode", None)
+                            cn_m = _mrid_str(cn)
+                            if cn_m:
+                                self._transformer_primary_cn[pt_mrid] = cn_m
+
+        # ── 2. TransformerTankEnd Linkage (Distribution level) ──
+        tte_cls = getattr(cim, "TransformerTankEnd", None)
+        if tte_cls:
+            for _eid, tte in graph.get(tte_cls, {}).items():
+                tank = getattr(tte, "TransformerTank", None)
+                tank_id = _mrid_str(tank)
+                if tank_id:
+                    # Link to kVA via EndInfo catalog
+                    ei = getattr(tte, "TransformerEndInfo", None)
+                    if ei:
+                        va = _safe_float(getattr(ei, "ratedS", None))
+                        if va:
+                            current = self._transformer_kva.get(tank_id, 0.0)
+                            self._transformer_kva[tank_id] = max(current, va / 1000.0)
+                    
+                    # Link to primary node for topology grouping
+                    if getattr(tte, "endNumber", None) == 1:
+                        term = getattr(tte, "Terminal", None)
+                        if term:
+                            cn = getattr(term, "ConnectivityNode", None)
+                            cn_m = _mrid_str(cn)
+                            if cn_m:
+                                self._transformer_primary_cn[tank_id] = cn_m
+                                # Propagate to parent PT as well
+                                pt = getattr(tank, "PowerTransformer", None)
+                                pt_id = _mrid_str(pt)
+                                if pt_id:
+                                    self._transformer_primary_cn[pt_id] = cn_m
+
+        # ── 3. Propagate Tank ratings to parent PowerTransformer ──
+        tt_cls = getattr(cim, "TransformerTank", None)
+        if tt_cls:
+            for _id, t in graph.get(tt_cls, {}).items():
+                t_id = _mrid_str(t)
+                kva = self._transformer_kva.get(t_id)
+                if kva:
+                    pt = getattr(t, "PowerTransformer", None)
+                    pt_id = _mrid_str(pt)
+                    if pt_id:
+                        current = self._transformer_kva.get(pt_id, 0.0)
+                        self._transformer_kva[pt_id] = max(current, kva)
+
+        # ── 4. Fallback to Manual XML Scan (Highly robust for PNNL models) ──
+        # Link Tank -> Info -> ratedS using manual mRID maps
+        tank_count = 0
+        for tank_mrid, info_mrid in getattr(self, "_manual_tank_to_info", {}).items():
+            # If we don't already have a rating for this tank (or it's 0)
+            if self._transformer_kva.get(tank_mrid, 0.0) == 0.0:
+                kva = self._manual_info_to_kva.get(info_mrid)
+                if kva:
+                    # IEEE 8500 usually has ratedS in VA, we want KVA
+                    val = kva / 1000.0 if kva >= 500 else kva 
+                    self._transformer_kva[tank_mrid] = val
+                    tank_count += 1
+                    
+                    # Also update parent PowerTransformer if possible
+                    tank_obj_tuple = self._equipment_index.get(tank_mrid)
+                    if tank_obj_tuple:
+                        tank_obj = tank_obj_tuple[1]
+                        pt = getattr(tank_obj, "PowerTransformer", None)
+                        pt_id = _mrid_str(pt)
+                        if pt_id:
+                            self._transformer_kva[pt_id] = max(self._transformer_kva.get(pt_id, 0.0), val)
+
+        logger.info(
+            "  Transformer KVA index: %d transformers rated (%d from manual scan fallback)",
+            len(self._transformer_kva),
+            tank_count
+        )
 
     # ── Topology graph ────────────────────────────────────────────
 
@@ -465,6 +641,7 @@ class CimModelManager:
             node_type = "Bus"
             lat, lon = 0.0, 0.0
             is_open = False
+            transformer_kva = None
             connected_equipment: list[str] = []
 
             for eq_mrid in self._cn_equipment.get(cn_mrid, []):
@@ -490,13 +667,17 @@ class CimModelManager:
                             node_type = "Breaker"
                             is_open = self._equipment_open.get(eq_mrid, False)
                     elif eq_type == "PowerTransformer":
-                        if node_type in ("Bus", "Meter", "Switch", "Breaker"):
+                        # Only re-type as Transformer if this is the primary (source) side
+                        if self._transformer_primary_cn.get(eq_mrid) == cn_mrid:
                             node_type = "Transformer"
                         
                         # Capture transformer size (KVA)
                         kva = self._transformer_kva.get(eq_mrid)
                         if kva:
-                            transformer_kva = kva
+                            # We traditionally show the rating on the primary (source) side CN
+                            # but we can be more inclusive if the rating is found.
+                            if node_type == "Transformer" or transformer_kva is None:
+                                transformer_kva = kva
                     elif eq_type == "Capacitor":
                         if node_type == "Bus":
                             node_type = "Capacitor"
@@ -527,7 +708,7 @@ class CimModelManager:
                 "is_open": is_open,
                 "connected_equipment": connected_equipment,
                 "base_voltage_kv": base_voltage_kv,
-                "transformer_kva": locals().get("transformer_kva"), # Captured inside equipment loop
+                "transformer_kva": transformer_kva,
             })
 
         # ── Edges from conducting equipment ───────────────────────
@@ -689,6 +870,7 @@ class CimModelManager:
             enricher(detail, obj)
 
         return detail
+
 
     def get_node_cim_details(self, node_id: str) -> dict | None:
         """Enriched CIM details for a connectivity-node and its equipment."""
